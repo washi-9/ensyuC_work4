@@ -1,0 +1,162 @@
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#define PORT 10140
+#define BUFFER_SIZE 1024
+#define MAXCLIENTS 5
+
+int state = 1;
+
+int checkname(const char *name) {
+    return 1;
+}
+
+int main(int argc, char **argv) {
+    int sock, new_sock, k = 0;
+    int csock[MAXCLIENTS];
+    char cname[MAXCLIENTS][BUFFER_SIZE];
+    fd_set rfds;
+    struct timeval tv;
+    struct sockaddr_in svr, clt;
+    int clen, bytesRcvd, reuse;
+    char rbuf[BUFFER_SIZE];
+
+    // Initialize client sockets and names
+    for (int i = 0; i < MAXCLIENTS; i++) {
+        csock[i] = 0;
+        memset(cname[i], '\0', BUFFER_SIZE);
+    }
+
+    // state 1 start
+    if ((sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+        perror("socket() failed");
+        exit(1);
+    }
+
+    reuse = 1;
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+        perror("setsockopt() failed");
+        close(sock);
+        exit(1);
+    }
+
+    bzero(&svr, sizeof(svr));
+    svr.sin_family = AF_INET;
+    svr.sin_addr.s_addr = htonl(INADDR_ANY);
+    svr.sin_port = htons(PORT);
+
+    if (bind(sock, (struct sockaddr *)&svr, sizeof(svr)) < 0) {
+        perror("bind() failed");
+        close(sock);
+        exit(1);
+    }
+
+    if (listen(sock, MAXCLIENTS) < 0) {
+        perror("listen() failed");
+        close(sock);
+        exit(1);
+    }
+
+    // state 2 start
+    while (1) {
+        FD_ZERO(&rfds);
+        FD_SET(0, &rfds);
+        
+        int maxfd = sock;
+
+        for (int i = 0; i < MAXCLIENTS; i++) {
+            if (csock[i] > 0) {
+                FD_SET(csock[i], &rfds);
+            }
+            if (csock[i] > maxfd) {
+                maxfd = csock[i];
+            }
+        }
+
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+        
+        // state 3 start
+        int activity = select(maxfd + 1, &rfds, NULL, NULL, &tv);
+        if (activity < 0) {
+            perror("select() failed");
+            close(sock);
+            exit(1);
+        }
+
+        // new client connection
+        if (FD_ISSET(sock, &rfds)) {
+            // state 4 start
+            clen = sizeof(clt);
+            new_sock = accept(sock, (struct sockaddr *)&clt, &clen);
+            if (new_sock < 0) {
+                perror("accept() failed");
+                close(sock);
+                exit(1);
+            }
+            int cnum;
+
+            if (k+1 > MAXCLIENTS) {
+                write(new_sock, "REQUEST REJECTED\n", 18);
+                close(new_sock);
+            } else {
+                for (int i = 0; i < MAXCLIENTS; i++) {
+                    if (csock[i] == 0) {
+                        cnum = i;
+                        csock[cnum] = new_sock;
+                        write(new_sock, "REQUEST ACCEPTED\n",17);
+                    }
+                }
+            }
+            read(new_sock, cname[cnum], BUFFER_SIZE);
+            // check name processing
+            if (!checkname(cname[cnum])) {
+                write(new_sock, "USERNAME REJECTED\n", 18);
+                close(new_sock);
+                csock[cnum] = 0;
+                memset(cname[cnum], '\0', BUFFER_SIZE);
+            } else {
+                write(new_sock, "USERNAME REGISTERED\n", 20);
+                k++;
+            }
+        }
+
+        // message handling
+        for (int i = 0; i < MAXCLIENTS; i++) {
+            int sd = csock[i];
+            int sdi = i;
+
+            if (FD_ISSET(sd, &rfds)) {
+                bytesRcvd = read(sd, rbuf, BUFFER_SIZE);
+                if (bytesRcvd <= 0) {
+                    // Client disconnected
+                    for (int j = 0; j < MAXCLIENTS; j++) {
+                        if (csock[j] > 0 && j != sdi) {
+                            write(csock[j], cname[sdi], strlen(cname[sdi]));
+                            write(csock[j], " has left the chat.\n", 20);
+                        }
+                    }
+                    close(sd);
+                    csock[i] = 0;
+                    memset(cname[i], '\0', BUFFER_SIZE);
+                    k--;
+                } else {
+                    // Broadcast message to all clients
+                    for (int j = 0; j < MAXCLIENTS; j++) {
+                        if (csock[j] > 0 && j != sdi) {
+                            write(csock[j], cname[sdi], strlen(cname[sdi]));
+                            write(csock[j], ": ", 2);
+                            write(csock[j], rbuf, bytesRcvd);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
