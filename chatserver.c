@@ -176,9 +176,14 @@ int main(int argc, char **argv) {
                                 }
                             }
                         }
-
+                        char message[BUFFER_SIZE + 16];
+                        char* name = cname[sdi];
+                        name[strcspn(name, "\n")] = 0;
+                        snprintf(message, sizeof(message), "%s left the chat.\n", name);
+                        printf("%s", message);
                         close(sd);
                         csock[i] = 0;
+                        cnamecheck[sdi] = 0;
                         memset(cname[i], '\0', BUFFER_SIZE);
                         k--;
                     } else {
