@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
     int bytesRcvd;
     struct timeval tv;
     fd_set rfds;
+    setbuf(stdout, NULL);
 
     if (argc != 3) {
         fprintf(stderr, "Usage: %s <host> <username>\n", argv[0]);
@@ -52,7 +53,6 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    printf("state 1 finished\n");
     // state 2 start
     state = 2;
 
@@ -61,11 +61,13 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Server did not accept the connection.\n");
         state = 6;
         exit(1);
+    } else {
+        printf("join request accepted\n");
     }
 
-    printf("state 2 finished\n");
     // state 3 start
     state = 3;
+
 
     write(sock, argv[2], strlen(argv[2]));
     read(sock, rbuf, BUFFER_SIZE);
@@ -75,7 +77,6 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    printf("state 3 finished\n");
     // state 4 start
     state = 4;
 
