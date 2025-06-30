@@ -21,6 +21,7 @@ int main(int argc, char **argv) {
     int sock, new_sock, k = 0;
     int csock[MAXCLIENTS];
     char cname[MAXCLIENTS][BUFFER_SIZE];
+    int cnamecheck[MAXCLIENTS] = {0};
     fd_set rfds;
     struct timeval tv;
     struct sockaddr_in svr, clt;
@@ -67,7 +68,8 @@ int main(int argc, char **argv) {
     while (1) {
         FD_ZERO(&rfds);
         FD_SET(0, &rfds);
-        
+        FD_SET(sock, &rfds);
+
         int maxfd = sock;
 
         for (int i = 0; i < MAXCLIENTS; i++) {
@@ -90,70 +92,112 @@ int main(int argc, char **argv) {
             exit(1);
         }
 
-        // new client connection
-        if (FD_ISSET(sock, &rfds)) {
-            // state 4 start
-            clen = sizeof(clt);
-            new_sock = accept(sock, (struct sockaddr *)&clt, &clen);
-            if (new_sock < 0) {
-                perror("accept() failed");
-                close(sock);
-                exit(1);
-            }
-            int cnum;
-
-            if (k+1 > MAXCLIENTS) {
-                write(new_sock, "REQUEST REJECTED\n", 18);
-                close(new_sock);
-            } else {
-                for (int i = 0; i < MAXCLIENTS; i++) {
-                    if (csock[i] == 0) {
-                        cnum = i;
-                        csock[cnum] = new_sock;
-                        write(new_sock, "REQUEST ACCEPTED\n",17);
+        if (activity > 0) {
+            // new client connection
+            // start state 4
+            if (FD_ISSET(sock, &rfds)) {
+                // state 4 start
+                clen = sizeof(clt);
+                new_sock = accept(sock, (struct sockaddr *)&clt, &clen);
+                if (new_sock < 0) {
+                    perror("accept() failed");
+                    close(sock);
+                    exit(1);
+                }
+                int cnum;
+    
+                if (k+1 > MAXCLIENTS) {
+                    write(new_sock, "REQUEST REJECTED\n", 18);
+                    printf("Connection rejected: too many clients\n");
+                    close(new_sock);
+                } else {
+                    for (int i = 0; i < MAXCLIENTS; i++) {
+                        if (csock[i] == 0) {
+                            cnum = i;
+                            csock[cnum] = new_sock;
+                            write(new_sock, "REQUEST ACCEPTED\n",17);
+                            printf("New client connected: %d\n", cnum);
+                            break;
+                        }
                     }
                 }
+                // read(new_sock, cname[cnum], BUFFER_SIZE);
+                // // check name processing
+                // if (!checkname(cname[cnum])) {
+                //     write(new_sock, "USERNAME REJECTED\n", 18);
+                //     close(new_sock);
+                //     csock[cnum] = 0;
+                //     memset(cname[cnum], '\0', BUFFER_SIZE);
+                // } else {
+                //     write(new_sock, "USERNAME REGISTERED\n", 20);
+                //     k++;
+                // }
             }
-            read(new_sock, cname[cnum], BUFFER_SIZE);
-            // check name processing
-            if (!checkname(cname[cnum])) {
-                write(new_sock, "USERNAME REJECTED\n", 18);
-                close(new_sock);
-                csock[cnum] = 0;
-                memset(cname[cnum], '\0', BUFFER_SIZE);
-            } else {
-                write(new_sock, "USERNAME REGISTERED\n", 20);
-                k++;
-            }
-        }
-
-        // message handling
-        for (int i = 0; i < MAXCLIENTS; i++) {
-            int sd = csock[i];
-            int sdi = i;
-
-            if (FD_ISSET(sd, &rfds)) {
-                bytesRcvd = read(sd, rbuf, BUFFER_SIZE);
-                if (bytesRcvd <= 0) {
-                    // Client disconnected
-                    for (int j = 0; j < MAXCLIENTS; j++) {
-                        if (csock[j] > 0 && j != sdi) {
-                            write(csock[j], cname[sdi], strlen(cname[sdi]));
-                            write(csock[j], " has left the chat.\n", 20);
+    
+            // message handling
+            for (int i = 0; i < MAXCLIENTS; i++) {
+                int sd = csock[i];
+                int sdi = i;
+    
+                if (FD_ISSET(sd, &rfds)) {
+                    bytesRcvd = read(sd, rbuf, BUFFER_SIZE);
+                    if (cnamecheck[sdi] == 0) {
+                        // register client name
+                        if (bytesRcvd > 0) {
+                            rbuf[bytesRcvd] = '\0';
+                            strncpy(cname[sdi], rbuf, BUFFER_SIZE - 1); // name + '\0'
+                            if (checkname(cname[sdi])) {
+                                cnamecheck[sdi] = 1;
+                                write(sd, "USERNAME REGISTERED\n", 20);
+                                k++;
+                                printf("%s connected\n", cname[sdi]);
+                            } else {
+                                write(sd, "USERNAME REJECTED\n", 18);
+                                close(sd);
+                                csock[sdi] = 0;
+                                memset(cname[sdi], '\0', BUFFER_SIZE);
+                                continue; // Skip further processing for this client
+                            }
+                            cnamecheck[sdi] = 1; // Mark name as registered
+                            write(sd, "NAME REGISTERED\n", 17);
+                        } else {
+                            close(sd);
+                            csock[sdi] = 0;
                         }
                     }
-                    close(sd);
-                    csock[i] = 0;
-                    memset(cname[i], '\0', BUFFER_SIZE);
-                    k--;
-                } else {
-                    // Broadcast message to all clients
-                    for (int j = 0; j < MAXCLIENTS; j++) {
-                        if (csock[j] > 0 && j != sdi) {
-                            write(csock[j], cname[sdi], strlen(cname[sdi]));
-                            write(csock[j], ": ", 2);
-                            write(csock[j], rbuf, bytesRcvd);
+    
+                    if (bytesRcvd <= 0) {
+                        // Client disconnected
+                        for (int j = 0; j < MAXCLIENTS; j++) {
+                            if (csock[j] > 0 && j != sdi) {
+                                write(csock[j], cname[sdi], strlen(cname[sdi]));
+                                write(csock[j], " has left the chat.\n", 20);
+                            }
                         }
+                        close(sd);
+                        csock[i] = 0;
+                        memset(cname[i], '\0', BUFFER_SIZE);
+                        k--;
+                    } else {
+                        // Broadcast message to all clients
+                        rbuf[bytesRcvd] = '\0'; // Null-terminate the string
+                        for (int j = 0; j < MAXCLIENTS; j++) {
+                            if (csock[j] != 0) {
+                                char message[BUFFER_SIZE * 2 + 2];
+                                snprintf(message, sizeof(message), "%s: %s", cname[sdi], rbuf);
+                                write(csock[j], message, strlen(message));
+                                // write(csock[j], cname[sdi], strlen(cname[sdi]));
+                                // write(csock[j], ": ", 2);
+                                // write(csock[j], rbuf, bytesRcvd);
+                            }
+                        }
+                        // for (int j = 0; j < MAXCLIENTS; j++) {
+                        //     if (csock[j] > 0 && j != sdi) {
+                        //         write(csock[j], cname[sdi], strlen(cname[sdi]));
+                        //         write(csock[j], ": ", 2);
+                        //         write(csock[j], rbuf, bytesRcvd);
+                        //     }
+                        // }
                     }
                 }
             }
