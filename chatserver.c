@@ -116,22 +116,11 @@ int main(int argc, char **argv) {
                             cnum = i;
                             csock[cnum] = new_sock;
                             write(new_sock, "REQUEST ACCEPTED\n",17);
-                            printf("New client connected: %d\n", cnum);
+                            // printf("New client connected: %d\n", cnum);
                             break;
                         }
                     }
                 }
-                // read(new_sock, cname[cnum], BUFFER_SIZE);
-                // // check name processing
-                // if (!checkname(cname[cnum])) {
-                //     write(new_sock, "USERNAME REJECTED\n", 18);
-                //     close(new_sock);
-                //     csock[cnum] = 0;
-                //     memset(cname[cnum], '\0', BUFFER_SIZE);
-                // } else {
-                //     write(new_sock, "USERNAME REGISTERED\n", 20);
-                //     k++;
-                // }
             }
     
             // message handling
@@ -150,7 +139,6 @@ int main(int argc, char **argv) {
                                 cnamecheck[sdi] = 1;
                                 write(sd, "USERNAME REGISTERED\n", 20);
                                 k++;
-                                printf("%s connected\n", cname[sdi]);
                             } else {
                                 write(sd, "USERNAME REJECTED\n", 18);
                                 close(sd);
@@ -159,21 +147,36 @@ int main(int argc, char **argv) {
                                 continue; // Skip further processing for this client
                             }
                             cnamecheck[sdi] = 1; // Mark name as registered
-                            write(sd, "NAME REGISTERED\n", 17);
+                            // write(sd, "NAME REGISTERED\n", 17);
+                            char message[BUFFER_SIZE + 16];
+                            char* name = cname[sdi];
+                            name[strcspn(name, "\n")] = 0;
+                            snprintf(message, sizeof(message), "%s is registered.\n", name);
+                            printf("%s", message);
+                            break;
                         } else {
                             close(sd);
                             csock[sdi] = 0;
                         }
+                        continue;
                     }
     
                     if (bytesRcvd <= 0) {
                         // Client disconnected
                         for (int j = 0; j < MAXCLIENTS; j++) {
                             if (csock[j] > 0 && j != sdi) {
-                                write(csock[j], cname[sdi], strlen(cname[sdi]));
-                                write(csock[j], " has left the chat.\n", 20);
+                                char message[BUFFER_SIZE + 16];
+                                // write(csock[j], cname[sdi], strlen(cname[sdi]));
+                                // write(csock[j], " has left the chat.\n", 20);
+                                char* name = cname[sdi];
+                                name[strcspn(name, "\n")] = 0;
+                                snprintf(message, sizeof(message), "%s left the chat.\n", name);
+                                if (write(csock[j], message, strlen(message)) < 0) {
+                                    perror("write failed");
+                                }
                             }
                         }
+
                         close(sd);
                         csock[i] = 0;
                         memset(cname[i], '\0', BUFFER_SIZE);
@@ -183,9 +186,14 @@ int main(int argc, char **argv) {
                         rbuf[bytesRcvd] = '\0'; // Null-terminate the string
                         for (int j = 0; j < MAXCLIENTS; j++) {
                             if (csock[j] != 0) {
-                                char message[BUFFER_SIZE * 2 + 2];
-                                snprintf(message, sizeof(message), "%s: %s", cname[sdi], rbuf);
-                                write(csock[j], message, strlen(message));
+                                char message[BUFFER_SIZE * 2];
+                                char* name = cname[sdi];
+                                name[strcspn(name, "\n")] = 0;
+                                snprintf(message, sizeof(message), "%s >%s", name, rbuf);
+                                if (write(csock[j], message, strlen(message)) < 0) {
+                                    perror("write failed");
+                                }
+                                
                                 // write(csock[j], cname[sdi], strlen(cname[sdi]));
                                 // write(csock[j], ": ", 2);
                                 // write(csock[j], rbuf, bytesRcvd);
