@@ -19,6 +19,7 @@ int main(int argc, char **argv) {
     struct hostent *hp;
     char *servIP;
     char rbuf[BUFFER_SIZE];
+    char name[BUFFER_SIZE];
     int bytesRcvd;
     struct timeval tv;
     fd_set rfds;
@@ -56,7 +57,10 @@ int main(int argc, char **argv) {
     // state 2 start
     state = 2;
 
-    read(sock, rbuf, BUFFER_SIZE);
+    bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
+    if (bytesRcvd > 0) {
+        rbuf[bytesRcvd] = '\0';
+    }
     if (strncmp(rbuf, "REQUEST ACCEPTED\n", 17) != 0) {
         fprintf(stderr, "Server did not accept the connection.\n");
         state = 6;
@@ -68,13 +72,18 @@ int main(int argc, char **argv) {
     // state 3 start
     state = 3;
 
-
-    write(sock, argv[2], strlen(argv[2]));
-    read(sock, rbuf, BUFFER_SIZE);
+    snprintf(name, sizeof(name), "%s\n", argv[2]); // argv[2] + \n
+    write(sock, name, strlen(name));
+    bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
+    if (bytesRcvd > 0) {
+        rbuf[bytesRcvd] = '\0';
+    }
     if (strncmp(rbuf, "USERNAME REGISTERED\n", 20) != 0) {
         fprintf(stderr, "Server did not register the username.\n");
         state = 6;
         exit(1);
+    } else {
+        printf("user name registered\n");
     }
 
     // state 4 start
