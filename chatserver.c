@@ -16,17 +16,12 @@ char cname[MAXCLIENTS][BUFFER_SIZE];
 int state = 1;
 
 int checkname(const char *name) {
-    // In: string + '\0'
-    // Out: 1 if valid, 0 if invalid
-    for (int i = 0; i < strlen(name) - 1; i++) {
-        printf("checkname: %c\n", name[i]);
+    for (int i = 0; i < strlen(name); i++) {
         if (isalnum(name[i]) == 0 && name[i] != '-' && name[i] != '_') {
-            return 0;
+            return 0; // Invalid character in name
         }
     }
-    printf("name length: %s (%d)\n", name, (int)strlen(name));
     for (int i = 0; i < MAXCLIENTS; i++) {
-        printf("checkname: %s (%lu)\n", cname[i], (unsigned long)strlen(cname[i]));
         if (cname[i][0] != '\0' && strcmp(name, cname[i]) == 0) {
             return 0; // Name already exists
         }
@@ -150,6 +145,7 @@ int main(int argc, char **argv) {
                         // register client name
                         if (bytesRcvd > 0) {
                             rbuf[bytesRcvd] = '\0';
+                            rbuf[strcspn(rbuf, "\n")] = '\0';
                             if (checkname(rbuf)) {
                                 strncpy(cname[sdi], rbuf, BUFFER_SIZE - 1); // name + '\0'
                                 cnamecheck[sdi] = 1;
@@ -166,7 +162,7 @@ int main(int argc, char **argv) {
                             // write(sd, "NAME REGISTERED\n", 17);
                             char message[BUFFER_SIZE + 16];
                             char* name = cname[sdi];
-                            name[strcspn(name, "\n")] = 0;
+                            name[strcspn(name, "\n")] = '\0';
                             snprintf(message, sizeof(message), "%s is registered.\n", name);
                             printf("%s", message);
                             break;
@@ -182,10 +178,8 @@ int main(int argc, char **argv) {
                         for (int j = 0; j < MAXCLIENTS; j++) {
                             if (csock[j] > 0 && j != sdi) {
                                 char message[BUFFER_SIZE + 16];
-                                // write(csock[j], cname[sdi], strlen(cname[sdi]));
-                                // write(csock[j], " has left the chat.\n", 20);
                                 char* name = cname[sdi];
-                                name[strcspn(name, "\n")] = 0;
+                                name[strcspn(name, "\n")] = '\0';
                                 snprintf(message, sizeof(message), "%s left the chat.\n", name);
                                 if (write(csock[j], message, strlen(message)) < 0) {
                                     perror("write failed");
@@ -194,7 +188,7 @@ int main(int argc, char **argv) {
                         }
                         char message[BUFFER_SIZE + 16];
                         char* name = cname[sdi];
-                        name[strcspn(name, "\n")] = 0;
+                        name[strcspn(name, "\n")] = '\0';
                         snprintf(message, sizeof(message), "%s left the chat.\n", name);
                         printf("%s", message);
                         close(sd);
@@ -209,7 +203,7 @@ int main(int argc, char **argv) {
                             if (csock[j] != 0) {
                                 char message[BUFFER_SIZE * 2];
                                 char* name = cname[sdi];
-                                name[strcspn(name, "\n")] = 0;
+                                name[strcspn(name, "\n")] = '\0';
                                 snprintf(message, sizeof(message), "%s >%s", name, rbuf);
                                 if (write(csock[j], message, strlen(message)) < 0) {
                                     perror("write failed");
