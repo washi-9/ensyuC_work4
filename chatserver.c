@@ -6,21 +6,37 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #define PORT 10140
 #define BUFFER_SIZE 1024
 #define MAXCLIENTS 5
 
+char cname[MAXCLIENTS][BUFFER_SIZE];
 int state = 1;
 
 int checkname(const char *name) {
+    // In: string + '\0'
+    // Out: 1 if valid, 0 if invalid
+    for (int i = 0; i < strlen(name) - 1; i++) {
+        printf("checkname: %c\n", name[i]);
+        if (isalnum(name[i]) == 0 && name[i] != '-' && name[i] != '_') {
+            return 0;
+        }
+    }
+    printf("name length: %s (%d)\n", name, (int)strlen(name));
+    for (int i = 0; i < MAXCLIENTS; i++) {
+        printf("checkname: %s (%lu)\n", cname[i], (unsigned long)strlen(cname[i]));
+        if (cname[i][0] != '\0' && strcmp(name, cname[i]) == 0) {
+            return 0; // Name already exists
+        }
+    }
     return 1;
 }
 
 int main(int argc, char **argv) {
     int sock, new_sock, k = 0;
     int csock[MAXCLIENTS];
-    char cname[MAXCLIENTS][BUFFER_SIZE];
     int cnamecheck[MAXCLIENTS] = {0};
     fd_set rfds;
     struct timeval tv;
@@ -134,8 +150,8 @@ int main(int argc, char **argv) {
                         // register client name
                         if (bytesRcvd > 0) {
                             rbuf[bytesRcvd] = '\0';
-                            strncpy(cname[sdi], rbuf, BUFFER_SIZE - 1); // name + '\0'
-                            if (checkname(cname[sdi])) {
+                            if (checkname(rbuf)) {
+                                strncpy(cname[sdi], rbuf, BUFFER_SIZE - 1); // name + '\0'
                                 cnamecheck[sdi] = 1;
                                 write(sd, "USERNAME REGISTERED\n", 20);
                                 k++;
@@ -198,19 +214,8 @@ int main(int argc, char **argv) {
                                 if (write(csock[j], message, strlen(message)) < 0) {
                                     perror("write failed");
                                 }
-                                
-                                // write(csock[j], cname[sdi], strlen(cname[sdi]));
-                                // write(csock[j], ": ", 2);
-                                // write(csock[j], rbuf, bytesRcvd);
                             }
                         }
-                        // for (int j = 0; j < MAXCLIENTS; j++) {
-                        //     if (csock[j] > 0 && j != sdi) {
-                        //         write(csock[j], cname[sdi], strlen(cname[sdi]));
-                        //         write(csock[j], ": ", 2);
-                        //         write(csock[j], rbuf, bytesRcvd);
-                        //     }
-                        // }
                     }
                 }
             }
