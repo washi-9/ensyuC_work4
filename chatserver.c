@@ -37,6 +37,30 @@ int checkname(const char *name, Client clients[]) {
     return 1;
 }
 
+void handle_new_connection(int new_sock, int k, Client clients[]) {
+    if (new_sock < 0) {
+        perror("accept() failed");
+        exit(1);
+    }
+
+    if (k+1 > MAXCLIENTS) {
+        write(new_sock, "REQUEST REJECTED\n", 18);
+        printf("Connection rejected: too many clients\n");
+        close(new_sock);
+        return;
+    } else {
+        for (int i = 0; i < MAXCLIENTS; i++) {
+            Client *client = &clients[i];
+            if (client->sock == 0) {
+                client->sock = new_sock;
+                write(client->sock, "REQUEST ACCEPTED\n", 17);
+                break;
+            }
+        }
+    }
+    return;
+}
+
 int main(int argc, char **argv) {
     int sock, new_sock, k = 0;
     fd_set rfds;
@@ -118,28 +142,7 @@ int main(int argc, char **argv) {
             if (FD_ISSET(sock, &rfds)) {
                 clen = sizeof(clt);
                 new_sock = accept(sock, (struct sockaddr *)&clt, &clen);
-                if (new_sock < 0) {
-                    perror("accept() failed");
-                    close(sock);
-                    exit(1);
-                }
-                int cnum;
-    
-                if (k+1 > MAXCLIENTS) {
-                    write(new_sock, "REQUEST REJECTED\n", 18);
-                    printf("Connection rejected: too many clients\n");
-                    close(new_sock);
-                } else {
-                    for (int i = 0; i < MAXCLIENTS; i++) {
-                        Client *client = &clients[i];
-                        if (client->sock == 0) {
-                            cnum = i;
-                            client->sock = new_sock;
-                            write(new_sock, "REQUEST ACCEPTED\n", 17);
-                            break;
-                        }
-                    }
-                }
+                handle_new_connection(new_sock, k, clients);
             }
     
             // message handling
