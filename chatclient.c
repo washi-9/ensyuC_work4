@@ -6,6 +6,8 @@
 #include<string.h>
 #include<stdio.h>
 #include<stdlib.h>
+#include<ctype.h>
+#include<sys/select.h>
 
 #define PORT 10140
 #define BUFFER_SIZE 1024
@@ -80,6 +82,7 @@ int main(int argc, char **argv) {
     }
     if (strncmp(rbuf, "USERNAME REGISTERED\n", 20) != 0) {
         fprintf(stderr, "Server did not register the username.\n");
+        printf("user name rejected\n");
         state = 6;
         exit(1);
     } else {
@@ -138,7 +141,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("state 4 finished\n");
     // state 5 start
     if (state == 5) {
         close(sock);

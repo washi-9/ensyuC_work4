@@ -13,8 +13,6 @@
 #define BUFFER_SIZE 1024
 #define MAXCLIENTS 5
 
-int state = 1;
-
 struct Client {
     int sock;
     char name[BUFFER_SIZE];
@@ -29,7 +27,6 @@ int checkname(const char *name, Client clients[]) {
     }
     for (int i = 0; i < MAXCLIENTS; i++) {
         Client *client = &clients[i];
-        // if (cname[i][0] != '\0' && strcmp(name, cname[i]) == 0) {
         if (client->is_named && strcmp(name, client->name) == 0) {
             return 0; // Name already exists
         }
@@ -77,7 +74,6 @@ int main(int argc, char **argv) {
         memset(clients[i].name, '\0', BUFFER_SIZE);
     }
 
-    // state 1 start
     if ((sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
         perror("socket() failed");
         exit(1);
@@ -107,7 +103,6 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    // state 2 start
     while (1) {
         FD_ZERO(&rfds);
         FD_SET(0, &rfds);
@@ -128,7 +123,6 @@ int main(int argc, char **argv) {
         tv.tv_sec = 1;
         tv.tv_usec = 0;
         
-        // state 3 start
         int activity = select(maxfd + 1, &rfds, NULL, NULL, &tv);
         if (activity < 0) {
             perror("select() failed");
@@ -138,7 +132,6 @@ int main(int argc, char **argv) {
 
         if (activity > 0) {
             // new client connection
-            // start state 4
             if (FD_ISSET(sock, &rfds)) {
                 clen = sizeof(clt);
                 new_sock = accept(sock, (struct sockaddr *)&clt, &clen);
@@ -148,11 +141,9 @@ int main(int argc, char **argv) {
             // message handling
             for (int i = 0; i < MAXCLIENTS; i++) {
                 Client *client = &clients[i];
-                int sd = client->sock;
-                int sdi = i;
     
-                if (FD_ISSET(sd, &rfds)) {
-                    bytesRcvd = read(sd, rbuf, BUFFER_SIZE);
+                if (FD_ISSET(client->sock, &rfds)) {
+                    bytesRcvd = read(client->sock, rbuf, BUFFER_SIZE);
                     if (client->is_named == 0) {
                         // register client name
                         if (bytesRcvd > 0) {
@@ -161,11 +152,11 @@ int main(int argc, char **argv) {
                             if (checkname(rbuf, clients)) {
                                 strncpy(client->name, rbuf, BUFFER_SIZE - 1);
                                 client->is_named = 1;
-                                write(sd, "USERNAME REGISTERED\n", 20);
+                                write(client->sock, "USERNAME REGISTERED\n", 20);
                                 k++;
                             } else {
-                                write(sd, "USERNAME REJECTED\n", 18);
-                                close(sd);
+                                write(client->sock, "USERNAME REJECTED\n", 18);
+                                close(client->sock);
                                 client->sock = 0;
                                 memset(client->name, '\0', BUFFER_SIZE);
                                 continue; // Skip further processing for this client
@@ -178,7 +169,7 @@ int main(int argc, char **argv) {
                             printf("%s", message);
                             break;
                         } else {
-                            close(sd);
+                            close(client->sock);
                             client->sock = 0;
                         }
                         continue;
@@ -203,7 +194,7 @@ int main(int argc, char **argv) {
                         name[strcspn(name, "\n")] = '\0';
                         snprintf(message, sizeof(message), "%s left the chat.\n", name);
                         printf("%s", message);
-                        close(sd);
+                        close(client->sock);
                         client->sock = 0;
                         client->is_named = 0;
                         memset(client->name, '\0', BUFFER_SIZE);
