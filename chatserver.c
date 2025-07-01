@@ -7,22 +7,30 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <sys/select.h>
 
 #define PORT 10140
 #define BUFFER_SIZE 1024
 #define MAXCLIENTS 5
 
-char cname[MAXCLIENTS][BUFFER_SIZE];
 int state = 1;
 
-int checkname(const char *name) {
+struct Client {
+    int sock;
+    char name[BUFFER_SIZE];
+    int is_named;
+} typedef Client;
+
+int checkname(const char *name, Client clients[]) {
     for (int i = 0; i < strlen(name); i++) {
         if (isalnum(name[i]) == 0 && name[i] != '-' && name[i] != '_') {
             return 0; // Invalid character in name
         }
     }
     for (int i = 0; i < MAXCLIENTS; i++) {
-        if (cname[i][0] != '\0' && strcmp(name, cname[i]) == 0) {
+        Client *client = &clients[i];
+        // if (cname[i][0] != '\0' && strcmp(name, cname[i]) == 0) {
+        if (client->is_named && strcmp(name, client->name) == 0) {
             return 0; // Name already exists
         }
     }
@@ -31,18 +39,18 @@ int checkname(const char *name) {
 
 int main(int argc, char **argv) {
     int sock, new_sock, k = 0;
-    int csock[MAXCLIENTS];
-    int cnamecheck[MAXCLIENTS] = {0};
     fd_set rfds;
     struct timeval tv;
     struct sockaddr_in svr, clt;
     int clen, bytesRcvd, reuse;
     char rbuf[BUFFER_SIZE];
+    Client clients[MAXCLIENTS];
 
     // Initialize client sockets and names
     for (int i = 0; i < MAXCLIENTS; i++) {
-        csock[i] = 0;
-        memset(cname[i], '\0', BUFFER_SIZE);
+        clients[i].sock = 0;
+        clients[i].is_named = 0;
+        memset(clients[i].name, '\0', BUFFER_SIZE);
     }
 
     // state 1 start
@@ -84,11 +92,12 @@ int main(int argc, char **argv) {
         int maxfd = sock;
 
         for (int i = 0; i < MAXCLIENTS; i++) {
-            if (csock[i] > 0) {
-                FD_SET(csock[i], &rfds);
+            Client *client = &clients[i];
+            if (client->sock > 0) {
+                FD_SET(client->sock, &rfds);
             }
-            if (csock[i] > maxfd) {
-                maxfd = csock[i];
+            if (client->sock > maxfd) {
+                maxfd = client->sock;
             }
         }
 
@@ -107,7 +116,6 @@ int main(int argc, char **argv) {
             // new client connection
             // start state 4
             if (FD_ISSET(sock, &rfds)) {
-                // state 4 start
                 clen = sizeof(clt);
                 new_sock = accept(sock, (struct sockaddr *)&clt, &clen);
                 if (new_sock < 0) {
@@ -123,11 +131,11 @@ int main(int argc, char **argv) {
                     close(new_sock);
                 } else {
                     for (int i = 0; i < MAXCLIENTS; i++) {
-                        if (csock[i] == 0) {
+                        Client *client = &clients[i];
+                        if (client->sock == 0) {
                             cnum = i;
-                            csock[cnum] = new_sock;
-                            write(new_sock, "REQUEST ACCEPTED\n",17);
-                            // printf("New client connected: %d\n", cnum);
+                            client->sock = new_sock;
+                            write(new_sock, "REQUEST ACCEPTED\n", 17);
                             break;
                         }
                     }
@@ -136,39 +144,39 @@ int main(int argc, char **argv) {
     
             // message handling
             for (int i = 0; i < MAXCLIENTS; i++) {
-                int sd = csock[i];
+                Client *client = &clients[i];
+                int sd = client->sock;
                 int sdi = i;
     
                 if (FD_ISSET(sd, &rfds)) {
                     bytesRcvd = read(sd, rbuf, BUFFER_SIZE);
-                    if (cnamecheck[sdi] == 0) {
+                    if (client->is_named == 0) {
                         // register client name
                         if (bytesRcvd > 0) {
                             rbuf[bytesRcvd] = '\0';
                             rbuf[strcspn(rbuf, "\n")] = '\0';
-                            if (checkname(rbuf)) {
-                                strncpy(cname[sdi], rbuf, BUFFER_SIZE - 1); // name + '\0'
-                                cnamecheck[sdi] = 1;
+                            if (checkname(rbuf, clients)) {
+                                strncpy(client->name, rbuf, BUFFER_SIZE - 1);
+                                client->is_named = 1;
                                 write(sd, "USERNAME REGISTERED\n", 20);
                                 k++;
                             } else {
                                 write(sd, "USERNAME REJECTED\n", 18);
                                 close(sd);
-                                csock[sdi] = 0;
-                                memset(cname[sdi], '\0', BUFFER_SIZE);
+                                client->sock = 0;
+                                memset(client->name, '\0', BUFFER_SIZE);
                                 continue; // Skip further processing for this client
                             }
-                            cnamecheck[sdi] = 1; // Mark name as registered
-                            // write(sd, "NAME REGISTERED\n", 17);
+                            client->is_named = 1;
                             char message[BUFFER_SIZE + 16];
-                            char* name = cname[sdi];
+                            char* name = client->name;
                             name[strcspn(name, "\n")] = '\0';
                             snprintf(message, sizeof(message), "%s is registered.\n", name);
                             printf("%s", message);
                             break;
                         } else {
                             close(sd);
-                            csock[sdi] = 0;
+                            client->sock = 0;
                         }
                         continue;
                     }
@@ -176,36 +184,38 @@ int main(int argc, char **argv) {
                     if (bytesRcvd <= 0) {
                         // Client disconnected
                         for (int j = 0; j < MAXCLIENTS; j++) {
-                            if (csock[j] > 0 && j != sdi) {
+                            Client *other_client = &clients[j];
+                            if (other_client->sock > 0 && other_client != client) {
                                 char message[BUFFER_SIZE + 16];
-                                char* name = cname[sdi];
+                                char* name = client->name;
                                 name[strcspn(name, "\n")] = '\0';
                                 snprintf(message, sizeof(message), "%s left the chat.\n", name);
-                                if (write(csock[j], message, strlen(message)) < 0) {
+                                if (write(other_client->sock, message, strlen(message)) < 0) {
                                     perror("write failed");
                                 }
                             }
                         }
                         char message[BUFFER_SIZE + 16];
-                        char* name = cname[sdi];
+                        char* name = client->name;
                         name[strcspn(name, "\n")] = '\0';
                         snprintf(message, sizeof(message), "%s left the chat.\n", name);
                         printf("%s", message);
                         close(sd);
-                        csock[i] = 0;
-                        cnamecheck[sdi] = 0;
-                        memset(cname[i], '\0', BUFFER_SIZE);
+                        client->sock = 0;
+                        client->is_named = 0;
+                        memset(client->name, '\0', BUFFER_SIZE);
                         k--;
                     } else {
                         // Broadcast message to all clients
                         rbuf[bytesRcvd] = '\0'; // Null-terminate the string
                         for (int j = 0; j < MAXCLIENTS; j++) {
-                            if (csock[j] != 0) {
+                            Client *all_client = &clients[j];
+                            if (all_client->sock != 0) {
                                 char message[BUFFER_SIZE * 2];
-                                char* name = cname[sdi];
+                                char* name = client->name;
                                 name[strcspn(name, "\n")] = '\0';
                                 snprintf(message, sizeof(message), "%s >%s", name, rbuf);
-                                if (write(csock[j], message, strlen(message)) < 0) {
+                                if (write(all_client->sock, message, strlen(message)) < 0) {
                                     perror("write failed");
                                 }
                             }
