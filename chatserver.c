@@ -8,10 +8,15 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <sys/select.h>
+#include <signal.h>
+#include <stdbool.h>
+#include <errno.h>
 
 #define PORT 10140
 #define BUFFER_SIZE 1024
 #define MAXCLIENTS 5
+
+bool is_ctrl_c = false;
 
 struct Client {
     int sock;
@@ -58,6 +63,10 @@ void handle_new_connection(int new_sock, int k, Client clients[]) {
     return;
 }
 
+void ctrlC() {
+    is_ctrl_c = true;
+}
+
 int main(int argc, char **argv) {
     int sock, new_sock, k = 0;
     fd_set rfds;
@@ -66,6 +75,11 @@ int main(int argc, char **argv) {
     int clen, bytesRcvd, reuse;
     char rbuf[BUFFER_SIZE];
     Client clients[MAXCLIENTS];
+
+        if(signal(SIGINT, ctrlC) == SIG_ERR) {
+        perror("signal failed.");
+        exit(1);
+    }
 
     // Initialize client sockets and names
     for (int i = 0; i < MAXCLIENTS; i++) {
@@ -103,7 +117,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    while (1) {
+    while (!is_ctrl_c) {
         FD_ZERO(&rfds);
         FD_SET(0, &rfds);
         FD_SET(sock, &rfds);
@@ -125,6 +139,9 @@ int main(int argc, char **argv) {
         
         int activity = select(maxfd + 1, &rfds, NULL, NULL, &tv);
         if (activity < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
             perror("select() failed");
             close(sock);
             exit(1);
@@ -219,4 +236,13 @@ int main(int argc, char **argv) {
             }
         }
     }
+
+    close(sock);
+    for (int i = 0; i < MAXCLIENTS; i++) {
+        if (clients[i].sock > 0) { 
+            close(clients[i].sock);
+        }
+    }
+    printf("\nServer closed.\n");
+    return 0;
 }
