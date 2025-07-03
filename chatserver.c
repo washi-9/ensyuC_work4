@@ -164,13 +164,21 @@ int main(int argc, char **argv) {
                     if (client->is_named == 0) {
                         // register client name
                         if (bytesRcvd > 0) {
+			    int overflowFlag = 0;
+			    if (strlen(rbuf) >= BUFFER_SIZE) {
+			    	printf("name is too long.");
+				overflowFlag = 1;
+			    }
                             rbuf[bytesRcvd] = '\0';
                             rbuf[strcspn(rbuf, "\n")] = '\0';
                             if (checkname(rbuf, clients)) {
                                 strncpy(client->name, rbuf, BUFFER_SIZE - 1);
                                 client->is_named = 1;
                                 write(client->sock, "USERNAME REGISTERED\n", 20);
-                                k++;
+                                if (overflowFlag) {
+				    write(client->sock,"The names up to the overflowing portion have been registered\n",61);
+				}
+				k++;
                             } else {
                                 write(client->sock, "USERNAME REJECTED\n", 18);
                                 close(client->sock);
