@@ -81,8 +81,7 @@ int main(int argc, char **argv) {
         rbuf[bytesRcvd] = '\0';
     }
     if (strncmp(rbuf, "USERNAME REGISTERED\n", 20) != 0) {
-        fprintf(stderr, "Server did not register the username.\n");
-        printf("user name rejected\n");
+        fprintf(stderr, "user name rejected\n");
         state = 6;
         exit(1);
     } else {
