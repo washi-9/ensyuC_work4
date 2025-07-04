@@ -15,12 +15,13 @@
 #define PORT 10140
 #define BUFFER_SIZE 1024
 #define MAXCLIENTS 5
+#define MAX_NAME_LENGTH 99
 
 bool is_ctrl_c = false;
 
 struct Client {
     int sock;
-    char name[BUFFER_SIZE];
+    char name[MAX_NAME_LENGTH + 1];
     int is_named;
 } typedef Client;
 
@@ -164,27 +165,25 @@ int main(int argc, char **argv) {
                     if (client->is_named == 0) {
                         // register client name
                         if (bytesRcvd > 0) {
-			    int overflowFlag = 0;
-			    if (strlen(rbuf) >= BUFFER_SIZE) {
-			    	printf("name is too long.");
-				overflowFlag = 1;
-			    }
                             rbuf[bytesRcvd] = '\0';
                             rbuf[strcspn(rbuf, "\n")] = '\0';
-                            if (checkname(rbuf, clients)) {
-                                strncpy(client->name, rbuf, BUFFER_SIZE - 1);
-                                client->is_named = 1;
+                            // check name length
+                            if (strlen(rbuf) > MAX_NAME_LENGTH) {
+                                printf("Too long user name. The maximum length is %d. The overflowed part is not used\n", MAX_NAME_LENGTH);
+                            }
+                            char client_name[MAX_NAME_LENGTH + 1];
+                            strncpy(client_name, rbuf, MAX_NAME_LENGTH + 1);
+                            client_name[MAX_NAME_LENGTH] = '\0';
+                            if (checkname(client_name, clients)) {
+                                strcpy(client->name, client_name);
                                 write(client->sock, "USERNAME REGISTERED\n", 20);
-                                if (overflowFlag) {
-				    write(client->sock,"The names up to the overflowing portion have been registered\n",61);
-				}
-				k++;
+                                k++;
                             } else {
                                 write(client->sock, "USERNAME REJECTED\n", 18);
                                 close(client->sock);
                                 client->sock = 0;
-                                memset(client->name, '\0', BUFFER_SIZE);
-                                continue; // Skip further processing for this client
+                                memset(client->name, '\0', MAX_NAME_LENGTH + 1);
+                                continue; 
                             }
                             client->is_named = 1;
                             char message[BUFFER_SIZE + 16];
