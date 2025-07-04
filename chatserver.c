@@ -192,7 +192,7 @@ int main(int argc, char **argv) {
                             name[strcspn(name, "\n")] = '\0';
                             snprintf(message, sizeof(message), "%s is registered.\n", name);
                             printf("%s", message);
-                            break;
+                            continue;
                         } else {
                             close(client->sock);
                             client->sock = -1;
