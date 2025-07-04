@@ -54,7 +54,7 @@ void handle_new_connection(int new_sock, int k, Client clients[]) {
     } else {
         for (int i = 0; i < MAXCLIENTS; i++) {
             Client *client = &clients[i];
-            if (client->sock == 0) {
+            if (client->sock == -1) {
                 client->sock = new_sock;
                 write(client->sock, "REQUEST ACCEPTED\n", 17);
                 break;
@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
 
     // Initialize client sockets and names
     for (int i = 0; i < MAXCLIENTS; i++) {
-        clients[i].sock = 0;
+        clients[i].sock = -1;
         clients[i].is_named = 0;
         memset(clients[i].name, '\0', BUFFER_SIZE);
     }
@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
 
         for (int i = 0; i < MAXCLIENTS; i++) {
             Client *client = &clients[i];
-            if (client->sock > 0) {
+            if (client->sock != -1) {
                 FD_SET(client->sock, &rfds);
             }
             if (client->sock > maxfd) {
@@ -159,9 +159,10 @@ int main(int argc, char **argv) {
             // message handling
             for (int i = 0; i < MAXCLIENTS; i++) {
                 Client *client = &clients[i];
-    
-                if (FD_ISSET(client->sock, &rfds)) {
+
+                if (client->sock > 0 && FD_ISSET(client->sock, &rfds)) {
                     bytesRcvd = read(client->sock, rbuf, BUFFER_SIZE);
+
                     if (client->is_named == 0) {
                         // register client name
                         if (bytesRcvd > 0) {
@@ -181,7 +182,7 @@ int main(int argc, char **argv) {
                             } else {
                                 write(client->sock, "USERNAME REJECTED\n", 18);
                                 close(client->sock);
-                                client->sock = 0;
+                                client->sock = -1;
                                 memset(client->name, '\0', MAX_NAME_LENGTH + 1);
                                 continue; 
                             }
@@ -194,7 +195,7 @@ int main(int argc, char **argv) {
                             break;
                         } else {
                             close(client->sock);
-                            client->sock = 0;
+                            client->sock = -1;
                         }
                         continue;
                     }
@@ -219,16 +220,16 @@ int main(int argc, char **argv) {
                         snprintf(message, sizeof(message), "%s left the chat.\n", name);
                         printf("%s", message);
                         close(client->sock);
-                        client->sock = 0;
+                        client->sock = -1;
                         client->is_named = 0;
                         memset(client->name, '\0', BUFFER_SIZE);
                         k--;
                     } else {
                         // Broadcast message to all clients
-                        rbuf[bytesRcvd] = '\0'; // Null-terminate the string
+                        rbuf[bytesRcvd] = '\0';
                         for (int j = 0; j < MAXCLIENTS; j++) {
                             Client *all_client = &clients[j];
-                            if (all_client->sock != 0) {
+                            if (all_client->sock != -1) {
                                 char message[BUFFER_SIZE * 2];
                                 char* name = client->name;
                                 name[strcspn(name, "\n")] = '\0';
