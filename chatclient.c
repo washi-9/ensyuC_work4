@@ -123,9 +123,14 @@ int main(int argc, char **argv) {
                         state = 5;
                         break;
                     } else {
+                        if (ifeof(stdin)) {
+                            state = 5;
+                            break;
+                        } else {
                         perror("fgets() failed");
                         state = 6;
                         break;
+                        }
                     }
                 }
             }
