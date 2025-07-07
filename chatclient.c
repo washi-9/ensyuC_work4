@@ -62,6 +62,8 @@ int main(int argc, char **argv) {
     bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
     if (bytesRcvd > 0) {
         rbuf[bytesRcvd] = '\0';
+    } else {
+        state = 6;
     }
     if (strncmp(rbuf, "REQUEST ACCEPTED\n", 17) != 0) {
         fprintf(stderr, "Server did not accept the connection.\n");
@@ -79,6 +81,8 @@ int main(int argc, char **argv) {
     bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
     if (bytesRcvd > 0) {
         rbuf[bytesRcvd] = '\0';
+    } else {
+        state = 6;
     }
     if (strncmp(rbuf, "USERNAME REGISTERED\n", 20) != 0) {
         fprintf(stderr, "user name rejected\n");
