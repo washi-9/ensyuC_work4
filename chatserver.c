@@ -47,7 +47,9 @@ void handle_new_connection(int new_sock, int k, Client clients[]) {
     }
 
     if (k+1 > MAXCLIENTS) {
-        write(new_sock, "REQUEST REJECTED\n", 18);
+        if (write(new_sock, "REQUEST REJECTED\n", 18) < 0) {
+            perror("write failed");
+        }
         printf("Connection rejected: too many clients\n");
         close(new_sock);
         return;
@@ -56,7 +58,9 @@ void handle_new_connection(int new_sock, int k, Client clients[]) {
             Client *client = &clients[i];
             if (client->sock == -1) {
                 client->sock = new_sock;
-                write(client->sock, "REQUEST ACCEPTED\n", 17);
+                if (write(client->sock, "REQUEST ACCEPTED\n", 17) < 0) {
+                    perror("write failed");
+                }
                 break;
             }
         }
@@ -120,7 +124,6 @@ int main(int argc, char **argv) {
 
     while (!is_ctrl_c) {
         FD_ZERO(&rfds);
-        FD_SET(0, &rfds);
         FD_SET(sock, &rfds);
 
         int maxfd = sock;
@@ -177,10 +180,14 @@ int main(int argc, char **argv) {
                             client_name[MAX_NAME_LENGTH] = '\0';
                             if (checkname(client_name, clients)) {
                                 strcpy(client->name, client_name);
-                                write(client->sock, "USERNAME REGISTERED\n", 20);
+                                if (write(client->sock, "USERNAME REGISTERED\n", 20) < 0) {
+                                    perror("write failed");
+                                }
                                 k++;
                             } else {
-                                write(client->sock, "USERNAME REJECTED\n", 18);
+                                if (write(client->sock, "USERNAME REJECTED\n", 18) < 0) {
+                                    perror("write failed");
+                                }
                                 close(client->sock);
                                 client->sock = -1;
                                 memset(client->name, '\0', MAX_NAME_LENGTH + 1);
@@ -222,7 +229,7 @@ int main(int argc, char **argv) {
                         close(client->sock);
                         client->sock = -1;
                         client->is_named = 0;
-                        memset(client->name, '\0', BUFFER_SIZE);
+                        memset(client->name, '\0', MAX_NAME_LENGTH + 1);
                         k--;
                     } else {
                         // Broadcast message to all clients
