@@ -11,6 +11,8 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <time.h>
+#include <arpa/inet.h>
 
 #define PORT 10140
 #define BUFFER_SIZE 1024
@@ -23,6 +25,7 @@ struct Client {
     int sock;
     char name[MAX_NAME_LENGTH + 1];
     int is_named;
+    char IP[INET_ADDRSTRLEN];
 } typedef Client;
 
 int checkname(const char *name, Client clients[]) {
@@ -40,23 +43,30 @@ int checkname(const char *name, Client clients[]) {
     return 1;
 }
 
-void handle_new_connection(int new_sock, int k, Client clients[]) {
+void handle_new_connection(int new_sock, int k, Client clients[], struct sockaddr_in *clt) {
     if (new_sock < 0) {
         perror("accept() failed");
         exit(1);
     }
 
     if (k+1 > MAXCLIENTS) {
-        write(new_sock, "REQUEST REJECTED\n", 18);
+        if (write(new_sock, "REQUEST REJECTED\n", 18) < 0) {
+            perror("write failed");
+        }
         printf("Connection rejected: too many clients\n");
         close(new_sock);
         return;
     } else {
         for (int i = 0; i < MAXCLIENTS; i++) {
             Client *client = &clients[i];
-            if (client->sock == 0) {
+            if (client->sock == -1) {
                 client->sock = new_sock;
-                write(client->sock, "REQUEST ACCEPTED\n", 17);
+                if (inet_ntop(AF_INET, &clt->sin_addr, client->IP, INET_ADDRSTRLEN) == NULL) {
+                    perror("inet_ntop failed");
+                }
+                if (write(client->sock, "REQUEST ACCEPTED\n", 17) < 0) {
+                    perror("write failed");
+                }
                 break;
             }
         }
@@ -78,6 +88,7 @@ int main(int argc, char **argv) {
     Client clients[MAXCLIENTS];
     FILE *fp = NULL;
     char *filename = "chatlog.txt";
+    // setbuf(stdout, NULL);
 
     fp = fopen(filename, "w");
     if (fp == NULL) {
@@ -85,17 +96,17 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-
-    if (signal(SIGINT, ctrlC) == SIG_ERR) {
+    if(signal(SIGINT, ctrlC) == SIG_ERR) {
         perror("signal failed.");
         exit(1);
     }
 
     // Initialize client sockets and names
     for (int i = 0; i < MAXCLIENTS; i++) {
-        clients[i].sock = 0;
+        clients[i].sock = -1;
         clients[i].is_named = 0;
         memset(clients[i].name, '\0', BUFFER_SIZE);
+        memset(clients[i].IP, '\0', INET_ADDRSTRLEN);
     }
 
     if ((sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
@@ -129,14 +140,13 @@ int main(int argc, char **argv) {
 
     while (!is_ctrl_c) {
         FD_ZERO(&rfds);
-        FD_SET(0, &rfds);
         FD_SET(sock, &rfds);
 
         int maxfd = sock;
 
         for (int i = 0; i < MAXCLIENTS; i++) {
             Client *client = &clients[i];
-            if (client->sock > 0) {
+            if (client->sock != -1) {
                 FD_SET(client->sock, &rfds);
             }
             if (client->sock > maxfd) {
@@ -162,7 +172,7 @@ int main(int argc, char **argv) {
             if (FD_ISSET(sock, &rfds)) {
                 clen = sizeof(clt);
                 new_sock = accept(sock, (struct sockaddr *)&clt, &clen);
-                handle_new_connection(new_sock, k, clients);
+                handle_new_connection(new_sock, k, clients, &clt);
             }
     
             // message handling
@@ -171,6 +181,7 @@ int main(int argc, char **argv) {
 
                 if (client->sock > 0 && FD_ISSET(client->sock, &rfds)) {
                     bytesRcvd = read(client->sock, rbuf, BUFFER_SIZE);
+
                     if (client->is_named == 0) {
                         // register client name
                         if (bytesRcvd > 0) {
@@ -185,12 +196,16 @@ int main(int argc, char **argv) {
                             client_name[MAX_NAME_LENGTH] = '\0';
                             if (checkname(client_name, clients)) {
                                 strcpy(client->name, client_name);
-                                write(client->sock, "USERNAME REGISTERED\n", 20);
+                                if (write(client->sock, "USERNAME REGISTERED\n", 20) < 0) {
+                                    perror("write failed");
+                                }
                                 k++;
                             } else {
-                                write(client->sock, "USERNAME REJECTED\n", 18);
+                                if (write(client->sock, "USERNAME REJECTED\n", 18) < 0) {
+                                    perror("write failed");
+                                }
                                 close(client->sock);
-                                client->sock = 0;
+                                client->sock = -1;
                                 memset(client->name, '\0', MAX_NAME_LENGTH + 1);
                                 continue; 
                             }
@@ -200,11 +215,13 @@ int main(int argc, char **argv) {
                             name[strcspn(name, "\n")] = '\0';
                             snprintf(message, sizeof(message), "%s is registered.\n", name);
                             printf("%s", message);
-                            fprintf(fp, "%s", message);
-                            break;
+                            if (fprintf(fp, "%s", message) < 0) {
+                                perror("write to file failed");
+                            }
+                            continue;
                         } else {
                             close(client->sock);
-                            client->sock = 0;
+                            client->sock = -1;
                         }
                         continue;
                     }
@@ -228,24 +245,30 @@ int main(int argc, char **argv) {
                         name[strcspn(name, "\n")] = '\0';
                         snprintf(message, sizeof(message), "%s left the chat.\n", name);
                         printf("%s", message);
-                        fflush(stdout);
-                        fprintf(fp, "%s", message);
+                        if (fprintf(fp, "%s", message) < 0) {
+                            perror("write to file failed");
+                        }
                         close(client->sock);
-                        client->sock = 0;
+                        client->sock = -1;
                         client->is_named = 0;
-                        memset(client->name, '\0', BUFFER_SIZE);
+                        memset(client->name, '\0', MAX_NAME_LENGTH + 1);
                         k--;
                     } else {
                         // Broadcast message to all clients
-                        rbuf[bytesRcvd] = '\0'; // Null-terminate the string
-                        fprintf(fp, "%s >%s", client->name, rbuf);
+                        rbuf[bytesRcvd] = '\0';
+                        if (fprintf(fp, "%s", rbuf) < 0) {
+                            perror("write to file failed");
+                        }
+                        char date[64];
+                        time_t now = time(NULL);
+                        strftime(date, sizeof(date), "%H:%M", localtime(&now));
                         for (int j = 0; j < MAXCLIENTS; j++) {
                             Client *all_client = &clients[j];
-                            if (all_client->sock != 0) {
+                            if (all_client->sock != -1) {
                                 char message[BUFFER_SIZE * 2];
                                 char* name = client->name;
                                 name[strcspn(name, "\n")] = '\0';
-                                snprintf(message, sizeof(message), "%s >%s", name, rbuf);
+                                snprintf(message, sizeof(message), "[%s] %s[%s] >%s", date, name,client->IP, rbuf);
                                 if (write(all_client->sock, message, strlen(message)) < 0) {
                                     perror("write failed");
                                 }
