@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
     // state 3 start
     state = 3;
 
-    snprintf(name, sizeof(name), "%s\n", argv[2]); // argv[2] + \n
+    snprintf(name, sizeof(name), "%s", argv[2]); // argv[2] + \n
     write(sock, name, strlen(name));
     bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
     if (bytesRcvd > 0) {
@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
                         state = 5;
                         break;
                     } else {
-                        if (ifeof(stdin)) {
+                        if (feof(stdin)) {
                             state = 5;
                             break;
                         } else {

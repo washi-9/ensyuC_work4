@@ -170,7 +170,7 @@ int main(int argc, char **argv) {
                         // register client name
                         if (bytesRcvd > 0) {
                             rbuf[bytesRcvd] = '\0';
-                            rbuf[strcspn(rbuf, "\n")] = '\0';
+                            // rbuf[strcspn(rbuf, "\n")] = '\0';
                             // check name length
                             if (strlen(rbuf) > MAX_NAME_LENGTH) {
                                 printf("Too long user name. The maximum length is %d. The overflowed part is not used\n", MAX_NAME_LENGTH);
