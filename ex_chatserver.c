@@ -186,7 +186,7 @@ int main(int argc, char **argv) {
                         // register client name
                         if (bytesRcvd > 0) {
                             rbuf[bytesRcvd] = '\0';
-                            rbuf[strcspn(rbuf, "\n")] = '\0';
+                            // rbuf[strcspn(rbuf, "\n")] = '\0';
                             // check name length
                             if (strlen(rbuf) > MAX_NAME_LENGTH) {
                                 printf("Too long user name. The maximum length is %d. The overflowed part is not used\n", MAX_NAME_LENGTH);
@@ -204,10 +204,7 @@ int main(int argc, char **argv) {
                                 if (write(client->sock, "USERNAME REJECTED\n", 18) < 0) {
                                     perror("write failed");
                                 }
-                                close(client->sock);
-                                client->sock = -1;
-                                memset(client->name, '\0', MAX_NAME_LENGTH + 1);
-                                continue; 
+                                continue;
                             }
                             client->is_named = 1;
                             char message[BUFFER_SIZE + 16];

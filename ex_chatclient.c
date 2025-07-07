@@ -62,6 +62,8 @@ int main(int argc, char **argv) {
     bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
     if (bytesRcvd > 0) {
         rbuf[bytesRcvd] = '\0';
+    } else {
+        state = 6;
     }
     if (strncmp(rbuf, "REQUEST ACCEPTED\n", 17) != 0) {
         fprintf(stderr, "Server did not accept the connection.\n");
@@ -74,19 +76,38 @@ int main(int argc, char **argv) {
     // state 3 start
     state = 3;
 
-    snprintf(name, sizeof(name), "%s\n", argv[2]); // argv[2] + \n
+    // first name registration
+    int nameRegisteredFlag = 0;
+    snprintf(name, sizeof(name), "%s", argv[2]);
     write(sock, name, strlen(name));
     bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
     if (bytesRcvd > 0) {
         rbuf[bytesRcvd] = '\0';
-    }
-    if (strncmp(rbuf, "USERNAME REGISTERED\n", 20) != 0) {
-        fprintf(stderr, "user name rejected\n");
-        state = 6;
-        exit(1);
     } else {
-        printf("user name registered\n");
+        state = 6;
     }
+    while (!nameRegisteredFlag && state == 3) {
+        if (strncmp(rbuf, "USERNAME REGISTERED\n", 20) == 0) {
+            printf("user name registered\n");
+            nameRegisteredFlag = 1;
+        } else {
+            fprintf(stderr, "user name rejected. enter the other name.\n");
+            fgets(rbuf, BUFFER_SIZE, stdin);
+            if (rbuf < 0) {
+                perror("fgets failed");
+                state = 6;
+                break;
+            }
+            write(sock, rbuf, strlen(rbuf));
+            bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
+            if (bytesRcvd > 0) {
+                rbuf[bytesRcvd] = '\0';
+            } else {
+                state = 6;
+            }
+        }
+    }
+
 
     // state 4 start
     state = 4;
@@ -119,9 +140,14 @@ int main(int argc, char **argv) {
                         state = 5;
                         break;
                     } else {
+                        if (feof(stdin)) {
+                            state = 5;
+                            break;
+                        } else {
                         perror("fgets() failed");
                         state = 6;
                         break;
+                        }
                     }
                 }
             }
