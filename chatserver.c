@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
     char rbuf[BUFFER_SIZE];
     Client clients[MAXCLIENTS];
 
-        if(signal(SIGINT, ctrlC) == SIG_ERR) {
+    if(signal(SIGINT, ctrlC) == SIG_ERR) {
         perror("signal failed.");
         exit(1);
     }
