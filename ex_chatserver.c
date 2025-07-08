@@ -253,6 +253,32 @@ int main(int argc, char **argv) {
                     } else {
                         // Broadcast message to all clients
                         rbuf[bytesRcvd] = '\0';
+
+                        // check command
+                        if (rbuf[0] == '/') {
+                            char command[BUFFER_SIZE];
+                            char argument[BUFFER_SIZE];
+                            sscanf(rbuf, "/%s %[^\n]", command, argument);
+    
+                            if (strcmp(command, "list") == 0) {
+                                char list[BUFFER_SIZE * 2] = "Connected clients:\n";
+                                for (int j = 0; j < MAXCLIENTS; j++) {
+                                    if (clients[j].sock != -1 && clients[j].is_named) {
+                                        strncat(list, clients[j].name, MAX_NAME_LENGTH);
+                                        strncat(list, "\n", 1);
+                                    }
+                                }
+                                if (write(client->sock, list, strlen(list)) < 0) {
+                                    perror("write failed");
+                                }
+                            } else {
+                                if (write(client->sock, "Unknown command\n", 16) < 0) {
+                                    perror("write failed");
+                                }
+                            }
+                            continue;
+                        }
+
                         if (fprintf(fp, "%s", rbuf) < 0) {
                             perror("write to file failed");
                         }
