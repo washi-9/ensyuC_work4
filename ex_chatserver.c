@@ -74,6 +74,29 @@ void handle_new_connection(int new_sock, int k, Client clients[], struct sockadd
     return;
 }
 
+void format_status_message(char *buffer, Client client[], Client *changed_client, bool is_join, int k) {
+    char *action = is_join ? "joined" : "left";
+    snprintf(buffer, BUFFER_SIZE, "%s %s the chat.\n current clients:\n", changed_client->name, action);
+    for (int i = 0; i < MAXCLIENTS; i++) {
+        if (client[i].sock > 0) {
+            if (!is_join && client[i].sock == changed_client->sock)  {
+                continue;
+            }
+            strncat(buffer, client[i].name, MAX_NAME_LENGTH);
+            strncat(buffer, "\n", 2);
+        }
+    }
+    if (is_join) {
+        strncat(buffer, "now ", 4);
+        strncat(buffer, k, 2);
+        strncat(buffer, " clients are connected.\n", 25);
+    } else {
+        strncat(buffer, "now ", 4);
+        strncat(buffer, k - 1, 2);
+        strncat(buffer, " clients are connected.\n", 25);
+    }
+}
+
 void ctrlC() {
     is_ctrl_c = true;
 }
@@ -226,9 +249,10 @@ int main(int argc, char **argv) {
                     if (bytesRcvd <= 0) {
                         // Client disconnected
                         char message[BUFFER_SIZE + 16];
-                        char* name = client->name;
-                        // name[strcspn(name, "\n")] = '\0';
-                        snprintf(message, sizeof(message), "%s left the chat.\n", name);
+                        // char* name = client->name;
+                        // snprintf(message, sizeof(message), "%s left the chat.\n", name);
+                        
+                        format_status_message(message, clients, client, false, k);
                         for (int j = 0; j < MAXCLIENTS; j++) {
                             Client *other_client = &clients[j];
                             if (other_client->sock > 0 && other_client != client) {
@@ -237,10 +261,6 @@ int main(int argc, char **argv) {
                                 }
                             }
                         }
-                        // char message[BUFFER_SIZE + 16];
-                        // char* name = client->name;
-                        // name[strcspn(name, "\n")] = '\0';
-                        // snprintf(message, sizeof(message), "%s left the chat.\n", name);
                         printf("%s", message);
                         if (fprintf(fp, "%s", message) < 0) {
                             perror("write to file failed");
