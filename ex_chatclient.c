@@ -92,7 +92,11 @@ int main(int argc, char **argv) {
             nameRegisteredFlag = 1;
         } else {
             fprintf(stderr, "user name rejected. enter the other name.\n");
-            fgets(rbuf, BUFFER_SIZE, stdin);
+            if (fgets(rbuf, BUFFER_SIZE, stdin) == NULL) {
+                perror("fgets failed");
+                state = 6;
+                break;
+            }
             if (rbuf < 0) {
                 perror("fgets failed");
                 state = 6;
