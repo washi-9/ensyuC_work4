@@ -186,7 +186,7 @@ int main(int argc, char **argv) {
                         // register client name
                         if (bytesRcvd > 0) {
                             rbuf[bytesRcvd] = '\0';
-                            // rbuf[strcspn(rbuf, "\n")] = '\0';
+                            rbuf[strcspn(rbuf, "\n")] = '\0';
                             // check name length
                             if (strlen(rbuf) > MAX_NAME_LENGTH) {
                                 printf("Too long user name. The maximum length is %d. The overflowed part is not used\n", MAX_NAME_LENGTH);
@@ -257,22 +257,48 @@ int main(int argc, char **argv) {
                         // check command
                         if (rbuf[0] == '/') {
                             char command[BUFFER_SIZE];
-                            char argument[BUFFER_SIZE];
-                            sscanf(rbuf, "/%s %[^\n]", command, argument);
-    
+                            char argument1[BUFFER_SIZE];
+                            char argument2[BUFFER_SIZE];
+                            int num_args = sscanf(rbuf, "/%s %s %[^\n]", command, argument1, argument2);
+
                             if (strcmp(command, "list") == 0) {
                                 char list[BUFFER_SIZE * 2] = "Connected clients:\n";
                                 for (int j = 0; j < MAXCLIENTS; j++) {
                                     if (clients[j].sock != -1 && clients[j].is_named) {
                                         strncat(list, clients[j].name, MAX_NAME_LENGTH);
-                                        strncat(list, "\n", 1);
+                                        strncat(list, "\n", 2);
                                     }
                                 }
                                 if (write(client->sock, list, strlen(list)) < 0) {
                                     perror("write failed");
                                 }
+                            } else if (strcmp(command, "send") == 0 && num_args == 3) {
+                                char *target_name = argument1;
+                                char *message = argument2;
+                                int target_found = 0;
+
+                                // find target client
+                                for (int j = 0; j < MAXCLIENTS; j++) {
+                                    if (clients[j].sock != -1 && clients[j].is_named && strcmp(clients[j].name, target_name) == 0) {
+                                        char dm_message[BUFFER_SIZE * 2];
+                                        char* name = client->name;
+
+                                        snprintf(dm_message, sizeof(dm_message), "[DM from %s]: %s\n", name, message);
+                                        if (write(clients[j].sock, dm_message, strlen(dm_message)) < 0) {
+                                            perror("write failed");
+                                        }
+                                        target_found = 1;
+                                        break;
+                                    }
+                                }
+
+                                if (!target_found) {
+                                    if (write(client->sock, "User not found\n", 16) < 0) {
+                                        perror("write failed");
+                                    }
+                                }
                             } else {
-                                if (write(client->sock, "Unknown command\n", 16) < 0) {
+                                if (write(client->sock, "Unknown command or invalid arguments\n", 36) < 0) {
                                     perror("write failed");
                                 }
                             }
