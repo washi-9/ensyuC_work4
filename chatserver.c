@@ -209,22 +209,17 @@ int main(int argc, char **argv) {
     
                     if (bytesRcvd <= 0) {
                         // Client disconnected
+                        char message[BUFFER_SIZE + 16];
+                        char* name = client->name;
+                        snprintf(message, sizeof(message), "%s left the chat.\n", name);
                         for (int j = 0; j < MAXCLIENTS; j++) {
                             Client *other_client = &clients[j];
                             if (other_client->sock > 0 && other_client != client) {
-                                char message[BUFFER_SIZE + 16];
-                                char* name = client->name;
-                                name[strcspn(name, "\n")] = '\0';
-                                snprintf(message, sizeof(message), "%s left the chat.\n", name);
                                 if (write(other_client->sock, message, strlen(message)) < 0) {
                                     perror("write failed");
                                 }
                             }
                         }
-                        char message[BUFFER_SIZE + 16];
-                        char* name = client->name;
-                        name[strcspn(name, "\n")] = '\0';
-                        snprintf(message, sizeof(message), "%s left the chat.\n", name);
                         printf("%s", message);
                         close(client->sock);
                         client->sock = -1;
