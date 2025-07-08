@@ -76,7 +76,7 @@ void handle_new_connection(int new_sock, int k, Client clients[], struct sockadd
 
 void format_status_message(char *buffer, Client client[], Client *changed_client, bool is_join, int k) {
     char *action = is_join ? "joined" : "left";
-    snprintf(buffer, BUFFER_SIZE, "%s %s the chat.\n current clients:\n", changed_client->name, action);
+    snprintf(buffer, BUFFER_SIZE, "%s %s the chat.\ncurrent clients:\n", changed_client->name, action);
     for (int i = 0; i < MAXCLIENTS; i++) {
         if (client[i].sock > 0) {
             if (!is_join && client[i].sock == changed_client->sock)  {
@@ -86,15 +86,10 @@ void format_status_message(char *buffer, Client client[], Client *changed_client
             strncat(buffer, "\n", 2);
         }
     }
-    if (is_join) {
-        strncat(buffer, "now ", 4);
-        strncat(buffer, k, 2);
-        strncat(buffer, " clients are connected.\n", 25);
-    } else {
-        strncat(buffer, "now ", 4);
-        strncat(buffer, k - 1, 2);
-        strncat(buffer, " clients are connected.\n", 25);
-    }
+    char const_str[32];
+    int current_clients = is_join ? k : k - 1;
+    snprintf(const_str, sizeof(const_str), "now %d clients are connected.\n", current_clients);
+    strncat(buffer, const_str, sizeof(const_str));
 }
 
 void ctrlC() {
@@ -230,10 +225,17 @@ int main(int argc, char **argv) {
                                 continue;
                             }
                             client->is_named = 1;
-                            char message[BUFFER_SIZE + 16];
-                            char* name = client->name;
-                            name[strcspn(name, "\n")] = '\0';
-                            snprintf(message, sizeof(message), "%s is registered.\n", name);
+                            char message[BUFFER_SIZE];
+                            // char* name = client->name;
+                            format_status_message(message, clients, client, true, k);
+                            for (int j = 0; j < MAXCLIENTS; j++) {
+                                if (clients[j].sock > 0) {
+                                    if (write(clients[j].sock, message, strlen(message)) < 0) {
+                                        perror("write failed");
+                                    }
+                                }
+                            }
+                            // snprintf(message, sizeof(message), "%s is registered.\n", name);
                             printf("%s", message);
                             if (fprintf(fp, "%s", message) < 0) {
                                 perror("write to file failed");
