@@ -92,26 +92,29 @@ int main(int argc, char **argv) {
             nameRegisteredFlag = 1;
         } else {
             fprintf(stderr, "user name rejected. enter the other name.\n");
-            if (fgets(rbuf, BUFFER_SIZE, stdin) == NULL) {
-                perror("fgets failed");
-                state = 6;
-                break;
-            }
-            if (rbuf < 0) {
-                perror("fgets failed");
-                state = 6;
-                break;
-            }
-            write(sock, rbuf, strlen(rbuf));
-            bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
-            if (bytesRcvd > 0) {
-                rbuf[bytesRcvd] = '\0';
+            size_t len = strlen(rbuf);
+            if (fgets(rbuf, BUFFER_SIZE, stdin) != NULL) {
+                if (len > 0 && rbuf[0] == EOF) {
+                    state = 5;
+                    break;
+                }
+                if (write(sock, rbuf, len) != len) {
+                    perror("write() failed");
+                    break;
+                }
             } else {
-                state = 6;
+                if (feof(stdin)) {
+                    printf("Ctrl-D pressed. press Enter and exit chatclient\n");
+                    state = 5;
+                    break;
+                } else {
+                    perror("fgets() failed");
+                    state = 6;
+                    break;
+                }
             }
         }
     }
-
 
     // state 4 start
     state = 4;
@@ -144,14 +147,9 @@ int main(int argc, char **argv) {
                         state = 5;
                         break;
                     } else {
-                        if (feof(stdin)) {
-                            state = 5;
-                            break;
-                        } else {
                         perror("fgets() failed");
                         state = 6;
                         break;
-                        }
                     }
                 }
             }
