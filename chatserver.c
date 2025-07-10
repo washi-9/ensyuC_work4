@@ -170,7 +170,7 @@ int main(int argc, char **argv) {
                         // register client name
                         if (bytesRcvd > 0) {
                             rbuf[bytesRcvd] = '\0';
-                            // rbuf[strcspn(rbuf, "\n")] = '\0';
+                            rbuf[strcspn(rbuf, "\n")] = '\0';
                             // check name length
                             if (strlen(rbuf) > MAX_NAME_LENGTH) {
                                 printf("Too long user name. The maximum length is %d. The overflowed part is not used\n", MAX_NAME_LENGTH);
@@ -195,9 +195,9 @@ int main(int argc, char **argv) {
                             }
                             client->is_named = 1;
                             char message[BUFFER_SIZE + 16];
-                            char* name = client->name;
-                            name[strcspn(name, "\n")] = '\0';
-                            snprintf(message, sizeof(message), "%s is registered.\n", name);
+                            // char* name = client->name;
+                            // name[strcspn(name, "\n")] = '\0';
+                            snprintf(message, sizeof(message), "%s is registered.\n", client->name);
                             printf("%s", message);
                             continue;
                         } else {
@@ -210,8 +210,8 @@ int main(int argc, char **argv) {
                     if (bytesRcvd <= 0) {
                         // Client disconnected
                         char message[BUFFER_SIZE + 16];
-                        char* name = client->name;
-                        snprintf(message, sizeof(message), "%s left the chat.\n", name);
+                        // char* name = client->name;
+                        snprintf(message, sizeof(message), "%s left the chat.\n", client->name);
                         for (int j = 0; j < MAXCLIENTS; j++) {
                             Client *other_client = &clients[j];
                             if (other_client->sock > 0 && other_client != client) {
@@ -228,14 +228,35 @@ int main(int argc, char **argv) {
                         k--;
                     } else {
                         // Broadcast message to all clients
-                        rbuf[bytesRcvd] = '\0';
+                            // rbuf[bytesRcvd] = '\0';
+                            // for (int j = 0; j < MAXCLIENTS; j++) {
+                            //     Client *all_client = &clients[j];
+                            //     if (all_client->sock != -1) {
+                            //         char message[BUFFER_SIZE * 2];
+                            //         // char* name = client->name;
+                            //         // name[strcspn(name, "\n")] = '\0';
+                            //         snprintf(message, sizeof(message), "%s >%s", client->name, rbuf);
+                            //         if (write(all_client->sock, message, strlen(message)) < 0) {
+                            //             perror("write failed");
+                            //         }
+                            //     }
+                            // }
+
+                        char message[BUFFER_SIZE * 2];
+                        int current_buf_pos = 0;
+                        current_buf_pos += snprintf(message, sizeof(message), "%s >", client->name);
+                        if (current_buf_pos + bytesRcvd < sizeof(message)) {
+                            memcpy(message + current_buf_pos, rbuf, bytesRcvd);
+                            current_buf_pos += bytesRcvd;
+
+                        }
+                        if (current_buf_pos < sizeof(message)) {
+                            message[current_buf_pos] = '\0';
+                        }
+                        printf("%s\n", message);
                         for (int j = 0; j < MAXCLIENTS; j++) {
                             Client *all_client = &clients[j];
                             if (all_client->sock != -1) {
-                                char message[BUFFER_SIZE * 2];
-                                char* name = client->name;
-                                name[strcspn(name, "\n")] = '\0';
-                                snprintf(message, sizeof(message), "%s >%s", name, rbuf);
                                 if (write(all_client->sock, message, strlen(message)) < 0) {
                                     perror("write failed");
                                 }
