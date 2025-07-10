@@ -68,7 +68,6 @@ int main(int argc, char **argv) {
     if (strncmp(rbuf, "REQUEST ACCEPTED\n", 17) != 0) {
         fprintf(stderr, "Server did not accept the connection.\n");
         state = 6;
-        exit(1);
     } else {
         printf("join request accepted\n");
     }
@@ -76,7 +75,7 @@ int main(int argc, char **argv) {
     // state 3 start
     state = 3;
 
-    snprintf(name, sizeof(name), "%s", argv[2]); // argv[2] + \n
+    snprintf(name, sizeof(name), "%s", argv[2]);
     write(sock, name, strlen(name));
     bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
     if (bytesRcvd > 0) {
@@ -87,7 +86,6 @@ int main(int argc, char **argv) {
     if (strncmp(rbuf, "USERNAME REGISTERED\n", 20) != 0) {
         fprintf(stderr, "user name rejected\n");
         state = 6;
-        exit(1);
     } else {
         printf("user name registered\n");
     }
@@ -110,10 +108,6 @@ int main(int argc, char **argv) {
                 // Read from stdin
                 if (fgets(rbuf, BUFFER_SIZE, stdin) != NULL) {
                     size_t len = strlen(rbuf);
-                    if (rbuf[0] == EOF) {
-                        state = 5;
-                        break;
-                    }
                     if (write(sock, rbuf, len) != len) {
                         perror("write() failed");
                         break;
@@ -123,14 +117,9 @@ int main(int argc, char **argv) {
                         state = 5;
                         break;
                     } else {
-                        if (feof(stdin)) {
-                            state = 5;
-                            break;
-                        } else {
                         perror("fgets() failed");
                         state = 6;
                         break;
-                        }
                     }
                 }
             }
@@ -150,12 +139,11 @@ int main(int argc, char **argv) {
     }
 
     // state 5 start
+    close(sock);
     if (state == 5) {
-        close(sock);
         printf("Exit chatclient\n");
         exit(0);
     } else if (state == 6) {
-        close(sock);
         printf("Error occurred\n");
         exit(1);
     }
