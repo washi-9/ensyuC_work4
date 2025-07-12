@@ -18,8 +18,12 @@
 #define BUFFER_SIZE 1024
 #define MAXCLIENTS 5
 #define MAX_NAME_LENGTH 99
+#define SHUTDOWN_COUNT 30
 
 bool is_ctrl_c = false;
+bool shutdown_initiated = false;
+time_t shutdown_start_time;
+const int shutdown_seconds = SHUTDOWN_COUNT;
 
 struct Client {
     int sock;
@@ -156,7 +160,31 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    while (!is_ctrl_c) {
+    while (1) {
+        if (is_ctrl_c && !shutdown_initiated) {
+            char shutdown_message[BUFFER_SIZE];
+            if (k == 0) {
+                printf("No clients connected. Shutting down immediately.\n");
+                break;
+            }
+            snprintf(shutdown_message, sizeof(shutdown_message), "Server is shutting down in %d seconds.\n", shutdown_seconds);
+            for (int i = 0; i < MAXCLIENTS; i++) {
+                if (clients[i].sock != -1) {
+                    if (write(clients[i].sock, shutdown_message, strlen(shutdown_message)) < 0) {
+                        perror("write failed");
+                    }
+                }
+            }
+            shutdown_initiated = true;
+            shutdown_start_time = time(NULL);
+            printf("\n%s", shutdown_message);
+            fflush(stdout);
+        }
+
+        if (shutdown_initiated && time(NULL) - shutdown_start_time >= SHUTDOWN_COUNT) {
+            break;
+        }
+
         FD_ZERO(&rfds);
         FD_SET(sock, &rfds);
 
@@ -226,7 +254,6 @@ int main(int argc, char **argv) {
                             }
                             client->is_named = 1;
                             char message[BUFFER_SIZE];
-                            // char* name = client->name;
                             format_status_message(message, clients, client, true, k);
                             for (int j = 0; j < MAXCLIENTS; j++) {
                                 if (clients[j].sock > 0) {
@@ -235,9 +262,10 @@ int main(int argc, char **argv) {
                                     }
                                 }
                             }
-                            // snprintf(message, sizeof(message), "%s is registered.\n", name);
+                            char logmessage[MAX_NAME_LENGTH + 16];
+                            snprintf(logmessage, sizeof(logmessage), "%s is joined.\n", client->name);
                             printf("%s", message);
-                            if (fprintf(fp, "%s", message) < 0) {
+                            if (fprintf(fp, "%s", logmessage) < 0) {
                                 perror("write to file failed");
                             }
                             continue;
@@ -251,8 +279,6 @@ int main(int argc, char **argv) {
                     if (bytesRcvd <= 0) {
                         // Client disconnected
                         char message[BUFFER_SIZE + 16];
-                        // char* name = client->name;
-                        // snprintf(message, sizeof(message), "%s left the chat.\n", name);
                         
                         format_status_message(message, clients, client, false, k);
                         for (int j = 0; j < MAXCLIENTS; j++) {
@@ -264,7 +290,9 @@ int main(int argc, char **argv) {
                             }
                         }
                         printf("%s", message);
-                        if (fprintf(fp, "%s", message) < 0) {
+                        char logmessage[MAX_NAME_LENGTH + 20];
+                        snprintf(logmessage, sizeof(logmessage), "%s left the chat.\n", client->name);
+                        if (fprintf(fp, "%s", logmessage) < 0) {
                             perror("write to file failed");
                         }
                         close(client->sock);
@@ -303,9 +331,7 @@ int main(int argc, char **argv) {
                                 for (int j = 0; j < MAXCLIENTS; j++) {
                                     if (clients[j].sock != -1 && clients[j].is_named && strcmp(clients[j].name, target_name) == 0) {
                                         char dm_message[BUFFER_SIZE * 2];
-                                        char* name = client->name;
-
-                                        snprintf(dm_message, sizeof(dm_message), "[DM from %s]: %s\n", name, message);
+                                        snprintf(dm_message, sizeof(dm_message), "[DM from %s]: %s\n", client->name, message);
                                         if (write(clients[j].sock, dm_message, strlen(dm_message)) < 0) {
                                             perror("write failed");
                                         }
@@ -326,10 +352,6 @@ int main(int argc, char **argv) {
                             }
                             continue;
                         }
-
-                        if (fprintf(fp, "%s", rbuf) < 0) {
-                            perror("write to file failed");
-                        }
                         char date[64];
                         time_t now = time(NULL);
                         strftime(date, sizeof(date), "%H:%M", localtime(&now));
@@ -337,24 +359,33 @@ int main(int argc, char **argv) {
                             Client *all_client = &clients[j];
                             if (all_client->sock != -1) {
                                 char message[BUFFER_SIZE * 2];
-                                char* name = client->name;
-                                name[strcspn(name, "\n")] = '\0';
-                                snprintf(message, sizeof(message), "[%s] %s[%s] >%s", date, name,client->IP, rbuf);
+                                snprintf(message, sizeof(message), "[%s] %s[%s] >%s", date, client->name,client->IP, rbuf);
                                 if (write(all_client->sock, message, strlen(message)) < 0) {
                                     perror("write failed");
                                 }
                             }
+                        }
+                        char logmessage[BUFFER_SIZE * 2];
+                        snprintf(logmessage, sizeof(logmessage), "[%s] %s[%s] >%s", date, client->name, client->IP, rbuf);
+                        if (fprintf(fp, "%s", logmessage) < 0) {
+                            perror("write to file failed");
                         }
                     }
                 }
             }
         }
     }
-
+    printf("Server is shutting down.\n");
+    if (fprintf(fp, "Server is shutting down.\n") < 0) {
+        perror("write to file failed");
+    }
     close(sock);
     fclose(fp);
     for (int i = 0; i < MAXCLIENTS; i++) {
         if (clients[i].sock > 0) { 
+            if (write(clients[i].sock, "Server is shutting down.\n", 25) < 0) {
+                perror("write failed");
+            }
             close(clients[i].sock);
         }
     }
