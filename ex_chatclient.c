@@ -80,41 +80,76 @@ int main(int argc, char **argv) {
     int nameRegisteredFlag = 0;
     snprintf(name, sizeof(name), "%s", argv[2]);
     write(sock, name, strlen(name));
-    bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
-    if (bytesRcvd > 0) {
-        rbuf[bytesRcvd] = '\0';
-    } else {
-        state = 6;
-    }
-    while (!nameRegisteredFlag && state == 3) {
+    // bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
+    // if (bytesRcvd > 0) {
+    //     rbuf[bytesRcvd] = '\0';
+    // } else {
+    //     state = 6;
+    // }
+
+    while (state == 3) {
+        bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
+        if (bytesRcvd > 0) {
+            rbuf[bytesRcvd] = '\0';
+        } else {
+            state = 6;
+            break;
+        }
+
         if (strncmp(rbuf, "USERNAME REGISTERED\n", 20) == 0) {
             printf("user name registered\n");
-            nameRegisteredFlag = 1;
+            state = 4;
         } else {
-            fprintf(stderr, "user name rejected. enter the other name.\n");
-            size_t len = strlen(rbuf);
-            if (fgets(rbuf, BUFFER_SIZE, stdin) != NULL) {
-                if (len > 0 && rbuf[0] == EOF) {
-                    state = 5;
-                    break;
-                }
-                if (write(sock, rbuf, len) != len) {
+            printf("user name rejected. enter another name.\n");
+            if (fgets(name, BUFFER_SIZE, stdin) != NULL) {
+                if (write(sock, name, strlen(name)) < 0) {
                     perror("write() failed");
-                    break;
-                }
-            } else {
-                if (feof(stdin)) {
-                    printf("Ctrl-D pressed. press Enter and exit chatclient\n");
-                    state = 5;
-                    break;
-                } else {
-                    perror("fgets() failed");
                     state = 6;
                     break;
                 }
+                continue;
+            } else if (feof(stdin)) {
+                printf("Ctrl-D pressed. press Enter and exit chatclient\n");
+                state = 5;
+                break;
+            } else {
+                perror("fgets() failed");
+                state = 6;
+                break;
             }
         }
     }
+
+
+    // while (!nameRegisteredFlag && state == 3) {
+    //     if (strncmp(rbuf, "USERNAME REGISTERED\n", 20) == 0) {
+    //         printf("user name registered\n");
+    //         nameRegisteredFlag = 1;
+    //     } else {
+    //         fprintf(stderr, "user name rejected. enter the other name.\n");
+    //         size_t len = strlen(rbuf);
+    //         if (fgets(rbuf, BUFFER_SIZE, stdin) != NULL) {
+    //             if (len > 0 && rbuf[0] == EOF) {
+    //                 state = 5;
+    //                 break;
+    //             }
+    //             if (write(sock, rbuf, len) != len) {
+    //                 perror("write() failed");
+    //                 break;
+    //             }
+    //         } else {
+    //             if (feof(stdin)) {
+    //                 printf("Ctrl-D pressed. press Enter and exit chatclient\n");
+    //                 state = 5;
+    //                 break;
+    //             } else {
+    //                 perror("fgets() failed");
+    //                 state = 6;
+    //                 break;
+    //             }
+    //         }
+    //     }
+    // }
 
     // state 4 start
     state = 4;
