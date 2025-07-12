@@ -147,8 +147,7 @@ int main(int argc, char **argv) {
                 continue;
             }
             perror("select() failed");
-            close(sock);
-            exit(1);
+            break;
         }
 
         if (activity > 0) {
@@ -195,8 +194,6 @@ int main(int argc, char **argv) {
                             }
                             client->is_named = 1;
                             char message[BUFFER_SIZE + 16];
-                            // char* name = client->name;
-                            // name[strcspn(name, "\n")] = '\0';
                             snprintf(message, sizeof(message), "%s is registered.\n", client->name);
                             printf("%s", message);
                             continue;
@@ -228,32 +225,9 @@ int main(int argc, char **argv) {
                         k--;
                     } else {
                         // Broadcast message to all clients
-                            // rbuf[bytesRcvd] = '\0';
-                            // for (int j = 0; j < MAXCLIENTS; j++) {
-                            //     Client *all_client = &clients[j];
-                            //     if (all_client->sock != -1) {
-                            //         char message[BUFFER_SIZE * 2];
-                            //         // char* name = client->name;
-                            //         // name[strcspn(name, "\n")] = '\0';
-                            //         snprintf(message, sizeof(message), "%s >%s", client->name, rbuf);
-                            //         if (write(all_client->sock, message, strlen(message)) < 0) {
-                            //             perror("write failed");
-                            //         }
-                            //     }
-                            // }
-
+                        rbuf[bytesRcvd] = '\0';
                         char message[BUFFER_SIZE * 2];
-                        int current_buf_pos = 0;
-                        current_buf_pos += snprintf(message, sizeof(message), "%s >", client->name);
-                        if (current_buf_pos + bytesRcvd < sizeof(message)) {
-                            memcpy(message + current_buf_pos, rbuf, bytesRcvd);
-                            current_buf_pos += bytesRcvd;
-
-                        }
-                        if (current_buf_pos < sizeof(message)) {
-                            message[current_buf_pos] = '\0';
-                        }
-                        printf("%s\n", message);
+                        snprintf(message, sizeof(message), "%s >%s", client->name, rbuf);
                         for (int j = 0; j < MAXCLIENTS; j++) {
                             Client *all_client = &clients[j];
                             if (all_client->sock != -1) {

@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     // state 3 start
     state = 3;
 
-    snprintf(name, sizeof(name), "%s", argv[2]);
+    snprintf(name, sizeof(name), "%s\n", argv[2]);
     write(sock, name, strlen(name));
     bytesRcvd = read(sock, rbuf, BUFFER_SIZE);
     if (bytesRcvd > 0) {
