@@ -112,7 +112,6 @@ int main(int argc, char **argv) {
         } else {
             if (feof(stdin)) {
                 printf("Exit Multichat Client\n");
-                running = 0;
                 break;
             } else {
                 perror("fgets() failed");

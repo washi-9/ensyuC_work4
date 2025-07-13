@@ -5,7 +5,6 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
 #include <errno.h>
 #include <ctype.h>
 #include <signal.h>
@@ -17,12 +16,11 @@
 #define BUFFER_SIZE 1024
 #define MAX_NAME_LENGTH 99
 
-struct {
+typedef struct {
     int sock;
     char name[MAX_NAME_LENGTH + 1];
-    pthread_t thread_id;
     int active;
-} typedef Client;
+} Client;
 
 Client clients[MAXCLIENTS];
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -80,7 +78,7 @@ void *handle_client(void *arg) {
         return NULL;
     }
 
-    rbuf[sizeof(rbuf) - 1] = '\0';
+    rbuf[bytesRcvd] = '\0';
     rbuf[strcspn(rbuf, "\n")] = '\0';
 
     if (strlen(rbuf) > MAX_NAME_LENGTH) {
