@@ -31,7 +31,7 @@ void broadcast(const char *message) {
     pthread_mutex_lock(&clients_mutex);
     for (int i = 0; i < MAXCLIENTS; i++) {
         if (clients[i].active) {
-            if (write(clients[i].sock, message, BUFFER_SIZE) < 0) {
+            if (write(clients[i].sock, message, strlen(message)) < 0) {
                 perror("write failed");
             }
         }
@@ -41,6 +41,7 @@ void broadcast(const char *message) {
 
 void *handle_client(void *arg) {
     int sock = *(int *)arg;
+    free(arg);
     int bytesRcvd;
     char name[MAX_NAME_LENGTH + 1];
     char rbuf[BUFFER_SIZE];
@@ -66,14 +67,15 @@ void *handle_client(void *arg) {
         return NULL;
     }
     
-    if (write(sock, "REQUEST ACCEPTED\n", 18) < 0) {
+    if (write(sock, "REQUEST ACCEPTED\n", 17) < 0) {
         perror("write failed");
         close(sock);
         return NULL;
     }
 
     // read user name
-    if ((bytesRcvd = read(sock, rbuf, sizeof(rbuf))) <= 0) {
+    bytesRcvd = read(sock, rbuf, sizeof(rbuf));
+    if (bytesRcvd <= 0) {
         close(sock);
         return NULL;
     }
@@ -103,7 +105,7 @@ void *handle_client(void *arg) {
         }
     }
 
-    if (!valid) { // valid name
+    if (!valid) { // invalid name
         write(sock, "USERNAME REJECTED\n", 18);
         pthread_mutex_unlock(&clients_mutex);
         close(sock);
@@ -116,7 +118,7 @@ void *handle_client(void *arg) {
     clients[index].active = 1;
 
     printf("%s is registered.\n", clients[index].name);
-    if (write(sock, "USERNAME REGISTERED\n",20) < 0) {
+    if (write(sock, "USERNAME REGISTERED\n", 20) < 0) {
         perror("write failed");
         close(sock);
         clients[index].active = 0;
@@ -125,7 +127,7 @@ void *handle_client(void *arg) {
     }
     pthread_mutex_unlock(&clients_mutex);
 
-    char message[BUFFER_SIZE*2];
+    char message[BUFFER_SIZE];
     snprintf(message, sizeof(message), "%s joined the chat\n", clients[index].name);
     broadcast(message);  
 
