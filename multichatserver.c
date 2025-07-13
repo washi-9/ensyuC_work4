@@ -37,8 +37,9 @@ void broadcast(const char *message) {
 
 void *handle_client(void *arg) {
     int sock = *(int *)arg;
-    char name[BUFFER_SIZE];
-    char buffer[BUFFER_SIZE];
+    int bytesRcvd;
+    char name[MAX_NAME_LENGTH + 1];
+    char rbuf[BUFFER_SIZE];
 
     
     pthread_mutex_lock(&clients_mutex);
@@ -52,64 +53,72 @@ void *handle_client(void *arg) {
             break;
         }
     }
+    pthread_mutex_unlock(&clients_mutex);
     
-    if (index != -1) {
-        if (write(sock, "REQUEST ACCEPTED\n", 18) < 0) {
-            perror("write failed");
-            close(sock);
-            pthread_mutex_unlock(&clients_mutex);
-            return NULL;
-        }
-    } else {
+    if (index == -1) {
         if (write(sock, "REQUEST REJECTED\n", 18) < 0) {
             perror("write failed");
             close(sock);
-            pthread_mutex_unlock(&clients_mutex);
             return NULL;
         }
+        close(sock);
+        return NULL;
     }
     
-    if (read(sock, name, sizeof(name)) <= 0) {
+    if (write(sock, "REQUEST ACCEPTED\n", 18) < 0) {
+        perror("write failed");
         close(sock);
-        pthread_mutex_unlock(&clients_mutex);
         return NULL;
     }
 
+    // read user name
+    if (read(sock, rbuf, sizeof(rbuf)) <= 0) {
+        close(sock);
+        return NULL;
+    }
 
-    if (strlen(name) > MAX_NAME_LENGTH) {
+    rbuf[sizeof(rbuf) - 1] = '\0';
+    rbuf[strcspn(rbuf, "\n")] = '\0';
+
+    if (strlen(rbuf) > MAX_NAME_LENGTH) {
         printf("Too long user name. The maximum length is %d. The overflowed part is not used\n", MAX_NAME_LENGTH);
     }
+    strncpy(name, rbuf, MAX_NAME_LENGTH+1);
+    name[MAX_NAME_LENGTH] = '\0';
 
-    name[strcspn(name, "\n")] = '\0';
-    int nameFlag = 1;
+    int valid = 1;
     for (int i = 0; i < strlen(name); i++) {
         if (isalnum(name[i]) == 0 && name[i] != '-' && name[i] != '_') {
-            nameFlag = 0;
+            valid = 0;
             break;
         }
     }
+
+    pthread_mutex_lock(&clients_mutex);
     for (int i = 0; i < MAXCLIENTS; i++) {
-        if (clients[i].active && strcmp(name, clients[i].name) == 0) {
-            nameFlag = 0;
+        if (clients[i].active && strcmp(clients[i].name, name) == 0) {
+            valid = 0;
             break;
         }
     }
-    if (nameFlag) { // valid name
-        if (write(sock, "USERNAME REGISTERED\n", 20) < 0) {
-            perror("write failed");
-            close(sock);
-            return NULL;
-        }
-        memset(name, '\0', MAX_NAME_LENGTH + 1);
-        strcpy(clients[index].name, name);
-        printf("%s is registered.\n", clients[index].name);
-        clients[index].sock = sock;
-        clients[index].active = 1;
-    } else {
-        if (write(sock, "USERNAME REJECTED\n", 18) < 0) {
-            perror("write failed");
-        }
+
+    if (!valid) { // valid name
+        write(sock, "USERNAME REJECTED\n", 18);
+        pthread_mutex_unlock(&clients_mutex);
         close(sock);
+        return NULL;
+    }
+
+    strncpy(clients[index].name, name, MAX_NAME_LENGTH);
+    clients[index].name[MAX_NAME_LENGTH] = '\0';
+    clients[index].sock = sock;
+    clients[index].active = 1;
+
+    printf("%s is registered.\n", clients[index].name);
+    if (write(sock, "USERNAME REGISTERED\n",20) < 0) {
+        perror("write failed");
+        close(sock);
+        clients[index].active = 0;
         pthread_mutex_unlock(&clients_mutex);
         return NULL;
     }
@@ -120,13 +129,13 @@ void *handle_client(void *arg) {
     broadcast(message);  
 
     while(1) {
-        int RbytesRcvd = read(sock, buffer, BUFFER_SIZE - 1);
-        if (RbytesRcvd <= 0) {
+        bytesRcvd = read(sock, rbuf, BUFFER_SIZE - 1);
+        if (bytesRcvd <= 0) {
             break;
         }
-        buffer[RbytesRcvd] = '\0';
+        rbuf[bytesRcvd] = '\0';
 
-        snprintf(message, BUFFER_SIZE, "%s >%s", clients[index].name, buffer);
+        snprintf(message, BUFFER_SIZE, "%s >%s", clients[index].name, rbuf);
         broadcast(message);
     }
 
