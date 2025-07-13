@@ -7,21 +7,26 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <ctype.h>
+#include <signal.h>
+#include <stdbool.h>
 
 #define PORT 10140
 #define MAXCLIENTS 5
 #define BUFFER_SIZE 1024
 #define MAX_NAME_LENGTH 99
 
-typedef struct {
+struct {
     int sock;
     char name[MAX_NAME_LENGTH + 1];
     pthread_t thread_id;
     int active;
-} Client;
+} typedef Client;
 
 Client clients[MAXCLIENTS];
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+bool is_ctrl_c = false;
 
 void broadcast(const char *message) {
     pthread_mutex_lock(&clients_mutex);
@@ -46,9 +51,6 @@ void *handle_client(void *arg) {
     int index = -1;
     for (int i = 0; i < MAXCLIENTS; i++) {
         if (!clients[i].active) {
-            // clients[i].sock = sock;
-            // strncpy(clients[i].name, name, MAX_NAME_LENGTH);
-            // clients[i].active = 1;
             index = i;
             break;
         }
@@ -128,14 +130,15 @@ void *handle_client(void *arg) {
     snprintf(message, sizeof(message), "%s joined the chat\n", clients[index].name);
     broadcast(message);  
 
-    while(1) {
+    while (!is_ctrl_c) {
         bytesRcvd = read(sock, rbuf, BUFFER_SIZE - 1);
         if (bytesRcvd <= 0) {
+            printf("%s left the chat\n", clients[index].name);
             break;
         }
         rbuf[bytesRcvd] = '\0';
 
-        snprintf(message, BUFFER_SIZE, "%s >%s", clients[index].name, rbuf);
+        snprintf(message, BUFFER_SIZE*2, "%s >%s", clients[index].name, rbuf);
         broadcast(message);
     }
 
@@ -143,19 +146,29 @@ void *handle_client(void *arg) {
 
     pthread_mutex_lock(&clients_mutex);
     clients[index].active = 0;
+    memset(clients[index].name, '\0', MAX_NAME_LENGTH + 1);
+    clients[index].sock = -1;
     pthread_mutex_unlock(&clients_mutex);
 
-    // char message[BUFFER_SIZE];
     snprintf(message, sizeof(message), "%s left the chat\n", clients[index].name);
     broadcast(message);
 
     return NULL;
 }
 
+void ctrlC() {
+    is_ctrl_c = true;
+}
+
 int main() {
     int sock, reuse;
     struct sockaddr_in svr, clt;
     socklen_t addr_len = sizeof(clt);
+
+    if(signal(SIGINT, ctrlC) == SIG_ERR) {
+        perror("signal failed.");
+        exit(1);
+    }
 
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("socket failed");
@@ -185,7 +198,7 @@ int main() {
         exit(1);
     }
 
-    while (1) {
+    while (!is_ctrl_c) {
         int csock = accept(sock, (struct sockaddr *)&clt, &addr_len);
         if (csock < 0) {
             perror("accept failed");
@@ -198,6 +211,17 @@ int main() {
         pthread_create(&tid, NULL, handle_client, pclient);
         pthread_detach(tid);
     }
+
+    pthread_mutex_lock(&clients_mutex);
+    for (int i = 0; i < MAXCLIENTS; i++) {
+        if (clients[i].active) {
+            close(clients[i].sock);
+            clients[i].active = 0;
+            memset(clients[i].name, '\0', MAX_NAME_LENGTH + 1);
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
+    pthread_mutex_destroy(&clients_mutex);
 
     close(sock);
     return 0;

@@ -23,7 +23,6 @@ void *receive_handler(void *arg) {
         printf("%s", rbuf);
         fflush(stdout);
     }
-    printf("\nConnection closed by server\n");
     running = 0;
     return NULL;
 }
@@ -104,13 +103,26 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    while (running && fgets(rbuf, BUFFER_SIZE, stdin) != NULL) {
-        if (write(sock, rbuf, strlen(rbuf)) < 0) {
-            perror("write() failed");
-            break;
-        }
+    while (running) {
+        if (fgets(rbuf, BUFFER_SIZE, stdin) != NULL) {
+            if (write(sock, rbuf, strlen(rbuf)) < 0) {
+                perror("write() failed");
+                break;
+            }
+        } else {
+            if (feof(stdin)) {
+                printf("Exit Multichat Client\n");
+                running = 0;
+                break;
+            } else {
+                perror("fgets() failed");
+                break;
+            }
+        } 
     }
-
+    if (shutdown(sock, SHUT_RDWR) < 0) {
+        perror("shutdown() failed");
+    }
     running = 0;
     close(sock);
     pthread_join(recv_thread, NULL);
