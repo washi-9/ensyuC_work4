@@ -12,15 +12,15 @@
 #include <sys/select.h>
 
 #define PORT 10140
-#define MAXCLIENTS 5
+#define MAXCLIENTS 2
 #define BUFFER_SIZE 1024
 #define MAX_NAME_LENGTH 99
 
-typedef struct {
+struct {
     int sock;
     char name[MAX_NAME_LENGTH + 1];
     int active;
-} Client;
+} typedef Client;
 
 Client clients[MAXCLIENTS];
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -73,7 +73,7 @@ void *handle_client(void *arg) {
     }
 
     // read user name
-    if (read(sock, rbuf, sizeof(rbuf)) <= 0) {
+    if ((bytesRcvd = read(sock, rbuf, sizeof(rbuf))) <= 0) {
         close(sock);
         return NULL;
     }
@@ -84,7 +84,7 @@ void *handle_client(void *arg) {
     if (strlen(rbuf) > MAX_NAME_LENGTH) {
         printf("Too long user name. The maximum length is %d. The overflowed part is not used\n", MAX_NAME_LENGTH);
     }
-    strncpy(name, rbuf, MAX_NAME_LENGTH+1);
+    strncpy(name, rbuf, MAX_NAME_LENGTH);
     name[MAX_NAME_LENGTH] = '\0';
 
     int valid = 1;
@@ -142,6 +142,10 @@ void *handle_client(void *arg) {
     }
 
     close(sock);
+    
+    char disconnected_name[MAX_NAME_LENGTH + 1];
+    strncpy(disconnected_name, clients[index].name, MAX_NAME_LENGTH);
+    disconnected_name[MAX_NAME_LENGTH] = '\0';
 
     pthread_mutex_lock(&clients_mutex);
     clients[index].active = 0;
@@ -149,7 +153,7 @@ void *handle_client(void *arg) {
     clients[index].sock = -1;
     pthread_mutex_unlock(&clients_mutex);
 
-    snprintf(message, sizeof(message), "%s left the chat\n", clients[index].name);
+    snprintf(message, sizeof(message), "%s left the chat\n", disconnected_name);
     broadcast(message);
 
     return NULL;
