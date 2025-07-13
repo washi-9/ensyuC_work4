@@ -10,6 +10,7 @@
 #include <ctype.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <sys/select.h>
 
 #define PORT 10140
 #define MAXCLIENTS 5
@@ -162,7 +163,9 @@ void ctrlC() {
 
 int main() {
     int sock, reuse;
+    fd_set rfds;
     struct sockaddr_in svr, clt;
+    struct timeval tv;
     socklen_t addr_len = sizeof(clt);
 
     if(signal(SIGINT, ctrlC) == SIG_ERR) {
@@ -199,17 +202,37 @@ int main() {
     }
 
     while (!is_ctrl_c) {
-        int csock = accept(sock, (struct sockaddr *)&clt, &addr_len);
-        if (csock < 0) {
-            perror("accept failed");
-            continue;
+        FD_ZERO(&rfds);
+        FD_SET(sock, &rfds);
+
+        int maxfd = sock;
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+
+        int activity = select(maxfd + 1, &rfds, NULL, NULL, &tv);
+        if (activity < 0) {
+            if (errno == EINTR) continue;
+            perror("select failed");
+            break;
         }
 
-        pthread_t tid;
-        int *pclient = malloc(sizeof(int));
-        *pclient = csock;
-        pthread_create(&tid, NULL, handle_client, pclient);
-        pthread_detach(tid);
+        if (is_ctrl_c) {
+            break;
+        }
+        if (FD_ISSET(sock, &rfds)) {
+            int csock = accept(sock, (struct sockaddr *)&clt, &addr_len);
+            if (csock < 0) {
+                if (errno == EINTR) break;
+                perror("accept failed");
+                continue;
+            }
+            
+            pthread_t tid;
+            int *pclient = malloc(sizeof(int));
+            *pclient = csock;
+            pthread_create(&tid, NULL, handle_client, pclient);
+            pthread_detach(tid);
+        }
     }
 
     pthread_mutex_lock(&clients_mutex);
@@ -222,6 +245,7 @@ int main() {
     }
     pthread_mutex_unlock(&clients_mutex);
     pthread_mutex_destroy(&clients_mutex);
+    printf("\nserver shutdown\n");
 
     close(sock);
     return 0;
